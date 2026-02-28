@@ -1,4 +1,4 @@
-import express from 'express'
+
 import dotenv from 'dotenv'
 dotenv.config()
 
@@ -10,5 +10,5 @@ connectDB()
 import app from './app.js'
 
 app.listen(port, () => {
-  console.log(`server running on port ${port}`)
+  console.log(`server running on port http://localhost:${port}`)
 })
