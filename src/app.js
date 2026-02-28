@@ -10,5 +10,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+import authRoutes from './routes/authRoutes.js';
+app.use('/auth', authRoutes);
 
 export default app;
