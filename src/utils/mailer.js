@@ -1,14 +1,16 @@
 import nodemailer from "nodemailer";
 
-export const sendEmail = async ({ to, subject, text, html }) => {
-    const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-            user: process.env.EMAIL,
-            pass: process.env.EMAIL_PASSWORD
-        }
-    });
+// Create transporter once at module level (singleton) to avoid
+// creating a new connection pool on every email send
+const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+        user: process.env.EMAIL,
+        pass: process.env.EMAIL_PASSWORD
+    }
+});
 
+export const sendEmail = async ({ to, subject, text, html }) => {
     const info = await transporter.sendMail({
         from: `"No Reply" <${process.env.EMAIL}>`,
         to,
@@ -16,7 +18,5 @@ export const sendEmail = async ({ to, subject, text, html }) => {
         text,
         html
     });
-// console.log("Email sent to:", to);
-// console.log("Info:", info);
     return { info };
 };

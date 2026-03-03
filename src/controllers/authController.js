@@ -39,7 +39,8 @@ const signToken = (user) => {
     if (!process.env.SECRET_KEY) {
         throw new Error("SECRET_KEY is not configured");
     }
-    return jwt.sign({ id: user._id, email: user.email }, process.env.SECRET_KEY, { expiresIn: "365d" });
+    // Reduced from 365d to 7d to limit exposure window of stolen tokens
+    return jwt.sign({ id: user._id, email: user.email }, process.env.SECRET_KEY, { expiresIn: "7d" });
 };
 
 const sanitizeUser = (user) => {
@@ -48,7 +49,7 @@ const sanitizeUser = (user) => {
     delete obj.password;
     delete obj.otp;
     delete obj.otpExpiry;
-      delete obj.forgotOtpVerification;
+    delete obj.forgotOtpVerification;
     delete obj.isVerified;
     return obj;
 };
@@ -94,7 +95,7 @@ const signUp = async (req, res) => {
         });
 
         if (!newUser) {
-            return res.status(404).json({
+            return res.status(500).json({
                 success: false,
                 message: "User creation failed"
             });
@@ -107,31 +108,30 @@ const signUp = async (req, res) => {
         await newUser.save();
 
         try {
-    await sendEmail({
-        to: email,
-        subject: "Verify your email",
-        text: `Your OTP is ${otp}. It will expire in 10 minutes.`
-    });
-} catch (emailError) {
-    // user will delete if otp failed to send for sign up verification because without otp verification user can't login and also for security reasons
-    await AuthModel.findByIdAndDelete(newUser._id);
-    return res.status(500).json({
-        success: false,
-        message: "Failed to send OTP. Please try again."
-    });
-}
+            await sendEmail({
+                to: email,
+                subject: "Verify your email",
+                text: `Your OTP is ${otp}. It will expire in 10 minutes.`
+            });
+        } catch (emailError) {
+            // user will delete if otp failed to send for sign up verification because without otp verification user can't login and also for security reasons
+            await AuthModel.findByIdAndDelete(newUser._id);
+            return res.status(500).json({
+                success: false,
+                message: "Failed to send OTP. Please try again."
+            });
+        }
 
         return res.status(201).json({
             success: true,
             message: "User created successfully. OTP sent to your email.",
             data: sanitizeUser(newUser)
-
         });
     } catch (error) {
+        console.error("signUp error:", error);
         return res.status(500).json({
             success: false,
-            message: "User creation failed",
-            error: error.message
+            message: "User creation failed"
         });
     }
 };
@@ -181,10 +181,10 @@ const login = async (req, res) => {
             data: sanitizeUser(existingUser)
         });
     } catch (error) {
+        console.error("login error:", error);
         return res.status(500).json({
             success: false,
-            message: "Login failed",
-            error: error.message
+            message: "Login failed"
         });
     }
 };
@@ -241,10 +241,10 @@ const resetPassword = async (req, res) => {
             data: sanitizeUser(user)
         });
     } catch (error) {
+        console.error("resetPassword error:", error);
         return res.status(500).json({
             success: false,
-            message: "Password reset failed",
-            error: error.message
+            message: "Password reset failed"
         });
     }
 };
@@ -273,7 +273,7 @@ const sendOTP = async (req, res) => {
         const otp = generateOTP();
         user.otp = otp;
         user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
-          user.forgotOtpVerification = false;
+        user.forgotOtpVerification = false;
         await user.save();
 
         await sendEmail({
@@ -287,10 +287,10 @@ const sendOTP = async (req, res) => {
             message: "OTP sent successfully"
         });
     } catch (error) {
+        console.error("sendOTP error:", error);
         return res.status(500).json({
             success: false,
-            message: "OTP sending failed",
-            error: error.message
+            message: "OTP sending failed"
         });
     }
 };
@@ -325,7 +325,7 @@ const verifySignUpOTP = async (req, res) => {
                 message: "Invalid OTP"
             });
         }
-        user.isVerified = true;            //
+        user.isVerified = true;
         user.otp = undefined;
         user.otpExpiry = undefined;
         await user.save();
@@ -334,13 +334,14 @@ const verifySignUpOTP = async (req, res) => {
             message: "Email verified successfully"
         });
     } catch (error) {
+        console.error("verifySignUpOTP error:", error);
         return res.status(500).json({
             success: false,
-            message: "OTP verification failed",
-            error: error.message
+            message: "OTP verification failed"
         });
     }
 };
+
 const verifyForgotOTP = async (req, res) => {
     try {
         const { email, otp } = req.body;
@@ -370,7 +371,7 @@ const verifyForgotOTP = async (req, res) => {
                 message: "Invalid OTP"
             });
         }
-        user.forgotOtpVerification = true;  //
+        user.forgotOtpVerification = true;
         user.otp = undefined;
         user.otpExpiry = undefined;
         await user.save();
@@ -379,13 +380,14 @@ const verifyForgotOTP = async (req, res) => {
             message: "OTP verified successfully"
         });
     } catch (error) {
+        console.error("verifyForgotOTP error:", error);
         return res.status(500).json({
             success: false,
-            message: "OTP verification failed",
-            error: error.message
+            message: "OTP verification failed"
         });
     }
 };
+
 // forgot password (with verified OTP)
 const forgotPassword = async (req, res) => {
     try {
@@ -430,10 +432,10 @@ const forgotPassword = async (req, res) => {
             data: sanitizeUser(user)
         });
     } catch (error) {
+        console.error("forgotPassword error:", error);
         return res.status(500).json({
             success: false,
-            message: "Password reset failed",
-            error: error.message
+            message: "Password reset failed"
         });
     }
 };
