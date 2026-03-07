@@ -30,10 +30,17 @@ const authSchema = new Schema(
         phone: { type: String, required: true },
         pinCode: { type: String, required: true },
         location: { type: String, required: true },
+        role:{
+            type: String,
+            enum: ["user", "admin"],
+            default: "user"
+        }
     },
     {
         timestamps: true
-    }
+    },
+
+
 );
 
 const AuthModel = model("auth", authSchema);
