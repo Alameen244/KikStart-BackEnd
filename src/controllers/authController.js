@@ -4,6 +4,9 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Joi from "joi";
 import { sendEmail } from "../utils/mailer.js";
+import otpTemplate from "../Templates/otpTemplate.js";
+import userTemplate from "../Templates/signUpTemplate.js";
+import resetTemplate from "../Templates/resetTemplate.js";
 
 const normalizeEmail = (email) => email?.trim().toLowerCase();
 
@@ -104,14 +107,15 @@ const signUp = async (req, res) => {
         // OTP generate for sign up verification
         const otp = generateOTP();
         newUser.otp = otp;
-        newUser.otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+        newUser.otpExpiry = new Date(Date.now() + 3 * 60 * 1000);
         await newUser.save();
 
         try {
             await sendEmail({
                 to: email,
                 subject: "Verify your email",
-                text: `Your OTP is ${otp}. It will expire in 10 minutes.`
+                text: `Your OTP is ${otp}. It will expire in 3 minutes.`,
+                html: otpTemplate(otp)
             });
         } catch (emailError) {
             // user will delete if otp failed to send for sign up verification because without otp verification user can't login and also for security reasons
@@ -272,14 +276,15 @@ const sendOTP = async (req, res) => {
 
         const otp = generateOTP();
         user.otp = otp;
-        user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+        user.otpExpiry = new Date(Date.now() + 3 * 60 * 1000);
         user.forgotOtpVerification = false;
         await user.save();
 
         await sendEmail({
             to: normalizedEmail,
             subject: "Your OTP Code",
-            text: `Your OTP is ${otp}. It will expire in 10 minutes.`
+            text: `Your OTP is ${otp}. It will expire in 3 minutes.`,
+            html: otpTemplate(otp)
         });
 
         return res.status(200).json({
@@ -329,6 +334,16 @@ const verifySignUpOTP = async (req, res) => {
         user.otp = undefined;
         user.otpExpiry = undefined;
         await user.save();
+
+        try {
+            await sendEmail({
+                to: normalizedEmail,
+                subject: "Welcome to KikStart!",
+                text: `Welcome ${user.name}, your account has been verified.`,
+                html: userTemplate(user.name)
+            });
+        } catch (_) { /* non-critical */ }
+
         return res.status(200).json({
             success: true,
             message: "Email verified successfully"
@@ -425,6 +440,15 @@ const forgotPassword = async (req, res) => {
         user.forgotOtpVerification = false;
         user.password = await bcrypt.hash(newPassword, 10);
         await user.save();
+
+        try {
+            await sendEmail({
+                to: normalizedEmail,
+                subject: "Password Reset Successful",
+                text: "Your password has been reset successfully.",
+                html: resetTemplate(user.name)
+            });
+        } catch (_) { /* non-critical */ }
 
         return res.status(200).json({
             success: true,
