@@ -42,7 +42,7 @@ ${generateOtp}
 
 <p style="margin-top:25px;">If you didn’t request this, you can safely ignore this email.</p>
 
-<p style="margin-top:30px;">Stay secure,<br><strong style="color:#ef4444;">KIKSTART Team</strong></p>
+<p style="margin-top:30px;">Stay secure,<br><strong style="color:#ef4444;"push>KIKSTART Team</strong></p>
 
 </td>
 </tr>

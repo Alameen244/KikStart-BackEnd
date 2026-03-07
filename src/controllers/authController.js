@@ -464,6 +464,83 @@ const forgotPassword = async (req, res) => {
     }
 };
 
+
+
+const resendOTP = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const normalizedEmail = normalizeEmail(email);
+
+        if (!normalizedEmail) {
+            return res.status(400).json({
+                success: false,
+                message: "Please provide an email"
+            });
+        }
+
+        const user = await AuthModel.findOne({ email: normalizedEmail });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        // Check if user is already verified
+        if (user.isVerified) {
+            return res.status(400).json({
+                success: false,
+                message: "Email is already verified"
+            });
+        }
+
+        // Check if there's an existing OTP that hasn't expired yet (30-second rate limiting)
+        if (user.otpExpiry && user.otpExpiry > new Date()) {
+            const timeSinceLastOTP = Date.now() - (user.otpExpiry.getTime() - 3 * 60 * 1000);
+            const timeRemaining = Math.max(0, 30 - Math.ceil(timeSinceLastOTP / 1000));
+
+            if (timeRemaining > 0) {
+                return res.status(429).json({
+                    success: false,
+                    message: `Please wait ${timeRemaining} seconds before requesting a new OTP`
+                });
+            }
+        }
+
+        // Generate new OTP
+        const otp = generateOTP();
+        user.otp = otp;
+        user.otpExpiry = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes expiry
+        await user.save();
+
+        try {
+            await sendEmail({
+                to: normalizedEmail,
+                subject: "Resend OTP - Verify your email",
+                text: `Your new OTP is ${otp}. It will expire in 3 minutes.`,
+                html: otpTemplate(otp)
+            });
+        } catch (emailError) {
+            console.error("Email sending error:", emailError);
+            return res.status(500).json({
+                success: false,
+                message: "Failed to send OTP. Please try again."
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "OTP resent successfully"
+        });
+    } catch (error) {
+        console.error("resendOtp error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "OTP resend failed"
+        });
+    }
+};
+
 export {
     signUp,
     login,
@@ -471,5 +548,6 @@ export {
     sendOTP,
     forgotPassword,
     verifySignUpOTP,
-    verifyForgotOTP
+    verifyForgotOTP,
+    resendOTP
 };
