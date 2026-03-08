@@ -17,6 +17,12 @@ const resetTemplate = (name) => {
 
 <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:40px 0;border-radius:12px;overflow:hidden;box-shadow:0 8px 25px rgba(0,0,0,0.05);">
 
+<tr>
+<td style="padding:24px 0 8px;text-align:center;background:#ffffff;">
+<img src="cid:kikstart-logo" alt="KIKSTART" style="width:170px;max-width:80%;height:auto;display:block;margin:0 auto;">
+</td>
+</tr>
+
 <!-- Header -->
 <tr>
 <td style="background:linear-gradient(135deg,#10b981,#059669);padding:40px;text-align:center;color:#ffffff;">
@@ -31,7 +37,7 @@ Your account is now secure
 <tr>
 <td style="padding:40px 35px;color:#374151;font-size:15px;line-height:1.7;">
 
-<h2 style="margin-top:0;">Hello User,</h2>
+<h2 style="margin-top:0;">Hello ${name}</h2>
 
 <p>
 This is a confirmation that your account password has been successfully updated.
@@ -51,7 +57,7 @@ Thank you for keeping your account secure.
 
 <p style="margin-top:30px;">
 Best regards,<br>
-<strong>Security Team</strong>
+<strong style="color:#ef4444;">Security Team</strong>
 </p>
 
 </td>

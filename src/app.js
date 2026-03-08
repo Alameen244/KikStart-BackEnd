@@ -6,7 +6,7 @@ import cors from 'cors';
 app.use(express.json());
 
 app.use(cors({
-    origin: process.env.ALLOWED_ORIGIN || 'http://localhost:5173',
+    origin: process.env.ALLOWED_ORIGIN || 'http://localhost:5100',
     methods: ["GET", "PUT", "POST", "DELETE", "PATCH"],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));

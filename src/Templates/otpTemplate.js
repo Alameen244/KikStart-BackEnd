@@ -17,6 +17,11 @@ const otpTemplate = (generateOtp) => {
 <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:40px 0;border-radius:12px;overflow:hidden;box-shadow:0 8px 25px rgba(0,0,0,0.05);">
 
 <tr>
+<td style="padding:24px 0 8px;text-align:center;background:#ffffff;">
+<img src="cid:kikstart-logo" alt="KIKSTART" style="width:170px;max-width:80%;height:auto;display:block;margin:0 auto;">
+</td>
+</tr>
+<tr>
 <td style="background:linear-gradient(135deg,#ef4444,#f97316);padding:40px;text-align:center;color:#ffffff;">
 <h1 style="margin:0;font-size:26px;">Verify Your Account 🔐</h1>
 <p style="margin:10px 0 0 0;font-size:15px;opacity:0.9;">One-Time Password</p>
@@ -64,3 +69,4 @@ ${generateOtp}
 };
 
 export default otpTemplate;
+

@@ -27,6 +27,11 @@ const authSchema = new Schema(
         otpExpiry: {
             type: Date
         },
+        pendingExpiryAt: {
+            type: Date,
+            expires: 0,
+            default: null
+        },
         phone: { type: String, required: true },
         pinCode: { type: String, required: true },
         location: { type: String, required: true },
