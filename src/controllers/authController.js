@@ -5,10 +5,12 @@ import jwt from "jsonwebtoken";
 import Joi from "joi";
 import { sendEmail } from "../utils/mailer.js";
 import otpTemplate from "../Templates/otpTemplate.js";
-import userTemplate from "../Templates/signUpTemplate.js";
 import resetTemplate from "../Templates/resetTemplate.js";
+import loginSuccessTemplate from "../Templates/loginSuccessTemplate.js";
+import registerSuccessTemplate from "../Templates/registerSuccessTemplate.js";
 
 const normalizeEmail = (email) => email?.trim().toLowerCase();
+const pendingExpiryDate = () => new Date(Date.now() + 24 * 60 * 60 * 1000);
 
 // generate OTP
 const generateOTP = () => {
@@ -17,8 +19,9 @@ const generateOTP = () => {
 
 const passwordSchema = Joi.string()
     .min(8)
-    .pattern(/[A-Z]/)
-    .pattern(/[0-9]/)
+    .pattern(/[A-Z]/)          // At least one uppercase
+    .pattern(/[a-z]/)          // At least one lowercase
+    .pattern(/[0-9]/)          // At least one number
     .required();
 
 const validatePassword = (password) => {
@@ -31,6 +34,9 @@ const validatePassword = (password) => {
     }
     if (!/[A-Z]/.test(password)) {
         messages.push("Password must contain at least one uppercase letter");
+    }
+    if (!/[a-z]/.test(password)) {
+        messages.push("Password must contain at least one lowercase letter");
     }
     if (!/[0-9]/.test(password)) {
         messages.push("Password must contain at least one number");
@@ -53,7 +59,6 @@ const sanitizeUser = (user) => {
     delete obj.otp;
     delete obj.otpExpiry;
     delete obj.forgotOtpVerification;
-    delete obj.isVerified;
     return obj;
 };
 
@@ -79,7 +84,7 @@ const signUp = async (req, res) => {
         }
 
         const existingUser = await AuthModel.findOne({ email });
-        if (existingUser) {
+        if (existingUser?.isVerified) {
             return res.status(400).json({
                 success: false,
                 message: "User already exists"
@@ -87,28 +92,38 @@ const signUp = async (req, res) => {
         }
 
         const hashedPass = await bcrypt.hash(data.password, 10);
-        const newUser = await AuthModel.create({
-            name: data.name,
-            email,
-            password: hashedPass,
-            phone: data.phone,
-            pinCode: data.pinCode,
-            location: data.location,
-            isVerified: false
-        });
+        let user = existingUser;
+        const isFreshSignUp = !user;
 
-        if (!newUser) {
-            return res.status(500).json({
-                success: false,
-                message: "User creation failed"
+        if (user) {
+            user.name = data.name;
+            user.password = hashedPass;
+            user.phone = data.phone;
+            user.pinCode = data.pinCode;
+            user.location = data.location;
+            user.isVerified = false;
+            user.forgotOtpVerification = false;
+            user.pendingExpiryAt = pendingExpiryDate();
+        } else {
+            user = new AuthModel({
+                name: data.name,
+                email,
+                password: hashedPass,
+                phone: data.phone,
+                pinCode: data.pinCode,
+                location: data.location,
+                isVerified: false,
+                pendingExpiryAt: pendingExpiryDate()
             });
         }
 
-        // OTP generate for sign up verification
         const otp = generateOTP();
-        newUser.otp = otp;
-        newUser.otpExpiry = new Date(Date.now() + 3 * 60 * 1000);
-        await newUser.save();
+        user.otp = otp;
+        user.otpExpiry = new Date(Date.now() + 3 * 60 * 1000);
+        await user.save();
+
+        // Generate token for immediate login
+        const token = signToken(user);
 
         try {
             await sendEmail({
@@ -118,18 +133,25 @@ const signUp = async (req, res) => {
                 html: otpTemplate(otp)
             });
         } catch (emailError) {
-            // user will delete if otp failed to send for sign up verification because without otp verification user can't login and also for security reasons
-            await AuthModel.findByIdAndDelete(newUser._id);
             return res.status(500).json({
                 success: false,
-                message: "Failed to send OTP. Please try again."
+                message: "Account saved, but OTP sending failed. Please try again."
             });
         }
 
-        return res.status(201).json({
+        return res.status(isFreshSignUp ? 201 : 200).json({
             success: true,
-            message: "User created successfully. OTP sent to your email.",
-            data: sanitizeUser(newUser)
+            message: isFreshSignUp
+                ? "User registered successfully. Please check your email for OTP."
+                : "Unverified account updated. A new OTP has been sent to your email.",
+            data: {
+                token,
+                user: {
+                    _id: user._id,
+                    name: user.name,
+                    email: user.email
+                }
+            }
         });
     } catch (error) {
         console.error("signUp error:", error);
@@ -177,6 +199,12 @@ const login = async (req, res) => {
         }
 
         const token = signToken(existingUser);
+        await sendEmail({
+            to: email,
+            subject: "Login Successful",
+            text: "You have successfully logged in.",
+            html: loginSuccessTemplate(existingUser.name, "Web", existingUser.location || "Unknown")
+        });
 
         return res.status(200).json({
             success: true,
@@ -333,6 +361,7 @@ const verifySignUpOTP = async (req, res) => {
         user.isVerified = true;
         user.otp = undefined;
         user.otpExpiry = undefined;
+        user.pendingExpiryAt = undefined;
         await user.save();
 
         try {
@@ -340,7 +369,7 @@ const verifySignUpOTP = async (req, res) => {
                 to: normalizedEmail,
                 subject: "Welcome to KikStart!",
                 text: `Welcome ${user.name}, your account has been verified.`,
-                html: userTemplate(user.name)
+                html:registerSuccessTemplate(user.name)
             });
         } catch (_) { /* non-critical */ }
 
@@ -437,6 +466,14 @@ const forgotPassword = async (req, res) => {
             });
         }
 
+        const isSame = await bcrypt.compare(newPassword, user.password);
+        if (isSame) {
+            return res.status(400).json({
+                success: false,
+                message: "New password cannot be same as old password"
+            });
+        }
+
         user.forgotOtpVerification = false;
         user.password = await bcrypt.hash(newPassword, 10);
         await user.save();
@@ -511,6 +548,7 @@ const resendOTP = async (req, res) => {
         const otp = generateOTP();
         user.otp = otp;
         user.otpExpiry = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes expiry
+        user.pendingExpiryAt = pendingExpiryDate();
         await user.save();
 
         try {
@@ -541,6 +579,43 @@ const resendOTP = async (req, res) => {
     }
 };
 
+const me = async (req, res) => {
+    try {
+        const userId = req.jwtPayload?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized"
+            });
+        }
+
+        const user = await AuthModel.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                isVerified: user.isVerified
+            }
+        });
+    } catch (error) {
+        console.error("me error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch profile"
+        });
+    }
+};
+
 export {
     signUp,
     login,
@@ -549,5 +624,6 @@ export {
     forgotPassword,
     verifySignUpOTP,
     verifyForgotOTP,
-    resendOTP
+    resendOTP,
+    me
 };

@@ -1,4 +1,10 @@
 import nodemailer from "nodemailer";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const logoPath = path.resolve(__dirname, "../Templates/image/image.png");
 
 let transporter;
 
@@ -27,7 +33,14 @@ export const sendEmail = async ({ to, subject, text, html }) => {
         to,
         subject,
         text,
-        html
+        html,
+        attachments: [
+            {
+                filename: "image.png",
+                path: logoPath,
+                cid: "kikstart-logo"
+            }
+        ]
     });
     return { info };
 };
