@@ -1,6 +1,5 @@
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
-
 export const initiateCloudinary = () => {
   cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -17,15 +16,16 @@ const safeUnlink = async (filePath) => {
   }
 };
 
-export const uploadOnCloudinary = async (filePath) => {
+export const uploadOnCloudinary = async (filePath, folder) => {
   try {
     if (!filePath) throw new Error("File path is required");
 
     const response = await cloudinary.uploader.upload(filePath, {
       resource_type: "auto",
+      folder,
     });
-
-    console.log("File uploaded on Cloudinary:", response.secure_url);
+      console.log("on Cloudinary:", response.secure_url);
+    console.log("on Cloudinary:", response.public_id);
 
     await safeUnlink(filePath);
     return response;

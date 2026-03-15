@@ -29,7 +29,11 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.17.0",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "nodemailer": "^6.9.14",
     "nodemon": "^3.1.10"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0"
   }
 }
