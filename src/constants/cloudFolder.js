@@ -8,4 +8,6 @@ export const cloudFolders = {
 
   ABOUT: "Kikstart/home/about",
 
+  OTHERS : "Kikstart/home/others"
+
 };

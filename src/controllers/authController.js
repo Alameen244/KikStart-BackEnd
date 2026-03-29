@@ -93,57 +93,38 @@ const signUp = async (req, res) => {
 
         const hashedPass = await bcrypt.hash(data.password, 10);
         let user = existingUser;
-        const isFreshSignUp = !user;
-
-        if (user) {
-            user.name = data.name;
-            user.password = hashedPass;
-            user.phone = data.phone;
-            user.pinCode = data.pinCode;
-            user.location = data.location;
-            user.isVerified = false;
-            user.forgotOtpVerification = false;
-            user.pendingExpiryAt = pendingExpiryDate();
-        } else {
-            user = new AuthModel({
+        if (user && !user.isVerified) {
+            return res.status(200).json({
+                success: true,
+                message: "user already exist but not verified ,OTP resent. Please verify your email."
+            });
+        }
+        else {
+            const newUser = await AuthModel.create({
                 name: data.name,
-                email,
+                email: email,
                 password: hashedPass,
                 phone: data.phone,
                 pinCode: data.pinCode,
                 location: data.location,
                 isVerified: false,
+                forgotOtpVerification: false,
                 pendingExpiryAt: pendingExpiryDate()
             });
+            user = newUser;
         }
 
         const otp = generateOTP();
         user.otp = otp;
         user.otpExpiry = new Date(Date.now() + 3 * 60 * 1000);
         await user.save();
-
         // Generate token for immediate login
         const token = signToken(user);
 
-        try {
-            await sendEmail({
-                to: email,
-                subject: "Verify your email",
-                text: `Your OTP is ${otp}. It will expire in 3 minutes.`,
-                html: otpTemplate(otp)
-            });
-        } catch (emailError) {
-            return res.status(500).json({
-                success: false,
-                message: "Account saved, but OTP sending failed. Please try again."
-            });
-        }
 
-        return res.status(isFreshSignUp ? 201 : 200).json({
+        return res.status(201).json({
             success: true,
-            message: isFreshSignUp
-                ? "User registered successfully. Please check your email for OTP."
-                : "Unverified account updated. A new OTP has been sent to your email.",
+            message: "User registered successfully. Please check your email for OTP.",
             data: {
                 token,
                 user: {
@@ -369,7 +350,7 @@ const verifySignUpOTP = async (req, res) => {
                 to: normalizedEmail,
                 subject: "Welcome to KikStart!",
                 text: `Welcome ${user.name}, your account has been verified.`,
-                html:registerSuccessTemplate(user.name)
+                html: registerSuccessTemplate(user.name)
             });
         } catch (_) { /* non-critical */ }
 

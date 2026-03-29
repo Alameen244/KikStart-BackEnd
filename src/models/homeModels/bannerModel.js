@@ -5,13 +5,13 @@ export const bannerImageSchema = new mongoose.Schema(
     {
         url: {
             type: String,
-            required: true,
             trim: true,
+            default: defaultImages.url,
         },
         public_id: {
             type: String,
             trim: true,
-            default: "",
+            default: defaultImages.public_id,
         },
     },
     { _id: false }
@@ -19,15 +19,11 @@ export const bannerImageSchema = new mongoose.Schema(
 
 const bannerSchema = new mongoose.Schema(
     {
-        singleton: {
-        type: String,
-        default: "main_banner",
-        unique: true
-    },
         subHeading: {
             type: String,
             required: true,
             trim: true,
+            default: "Welcome to our platform",
         },
         headings: [
             {
@@ -35,6 +31,7 @@ const bannerSchema = new mongoose.Schema(
                     type: String,
                     required: true,
                     trim: true,
+                    default: "Main heading",
                 },
             },
         ],
@@ -43,6 +40,7 @@ const bannerSchema = new mongoose.Schema(
             type: String,
             required: true,
             trim: true,
+            default: "Banner description",
         },
         guestButtonText: {
             type: String,
@@ -56,8 +54,10 @@ const bannerSchema = new mongoose.Schema(
         },
         image: {
             type: bannerImageSchema,
-            required: true,
-            default: defaultImages.banner,
+            default: {
+                url: defaultImages.url,
+                public_id: defaultImages.public_id,
+            },
         },
         isActive: {
             type: Boolean,

@@ -1,7 +1,8 @@
 
 import dotenv from 'dotenv'
 dotenv.config()
-
+import { initiateCloudinary } from './middlewares/cloudinary.middleware.js';
+initiateCloudinary();
 const port = process.env.PORT || 3000
 
 import {connectDB} from './config/db.js'
