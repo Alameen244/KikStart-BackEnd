@@ -1,8 +1,7 @@
 import { whoModel } from "../../models/homeModels/whoModels.js";
 import { buildImageData } from "../../Jobs/imageValidation.js";
 import { ensureSingleActive } from "../../utils/ensureSingleActive.js";
-import { defaultImages } from "../../constants/defaultImages.js";
-
+import mongoose from "mongoose";
 export const createWho = async (req, res) => {
   try {
     const {
@@ -119,26 +118,21 @@ export const getActiveWho = async (req, res) => {
     const whoSections = await whoModel
       .find({ isActive: true })
       .sort({ createdAt: -1 });
-    const fallbackWho = {
-      image1: {
-        url: defaultImages.url,
-        public_id: defaultImages.public_id,
-      },
-      image2: {
-        url: defaultImages.url,
-        public_id: defaultImages.public_id,
-      },
-      subHeading: "subHeading",
-      heading: "Heading",
-      description: "description",
-      buttonText: "buttonText",
-      isActive: true,
-    };
+
+    if (whoSections.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No active who section found",
+        empty: true,
+        data: [],
+      });
+    }
 
     return res.status(200).json({
       success: true,
       message: "Active who sections retrieved successfully",
-      data: whoSections.length > 0 ? whoSections : [fallbackWho],
+      empty: false,
+      data: whoSections,
     });
   } catch (error) {
     console.error("getActiveWho error:", error);
@@ -152,6 +146,14 @@ export const getActiveWho = async (req, res) => {
 export const updateWho = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid who id",
+      });
+    }
+
     const {
       subHeading,
       heading,
@@ -263,6 +265,13 @@ export const updateWho = async (req, res) => {
 export const deleteWho = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid who id",
+      });
+    }
 
     const deletedWho = await whoModel.findByIdAndDelete(id);
 

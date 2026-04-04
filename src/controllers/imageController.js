@@ -6,9 +6,10 @@ const getCloudinaryFolder = (folderKey) => cloudFolders[folderKey];
 export const uploadSingleImage = async (req, res) => {
   try {
     const folderKey = req.body.folder?.toUpperCase();
+    const imageUrl = req.body.imageUrl?.trim();
     const folder = getCloudinaryFolder(folderKey);
 
-    if (!req.file) {
+    if (!req.file && !imageUrl) {
       return res.status(400).json({
         success: false,
         message: "Image is required"
@@ -22,7 +23,7 @@ export const uploadSingleImage = async (req, res) => {
       });
     }
 
-    const result = await uploadOnCloudinary(req.file.path, folder);
+    const result = await uploadOnCloudinary(imageUrl || req.file.path, folder);
 
     return res.json({
       success: true,

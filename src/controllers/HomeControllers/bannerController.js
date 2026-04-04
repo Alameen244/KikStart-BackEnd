@@ -2,8 +2,8 @@ import { bannerModel } from "../../models/homeModels/bannerModel.js";
 import { v2 as cloudinary } from "cloudinary";
 import { buildImageData } from "../../Jobs/imageValidation.js";
 import { ensureSingleActive } from "../../utils/ensureSingleActive.js";
-import { defaultImages } from "../../constants/defaultImages.js";
 // import ImageTrash from "../../models/imageTrashModel.js";
+import mongoose from "mongoose";
 
 // Create a new banner document
 export const createBanner = async (req, res) => {
@@ -182,23 +182,21 @@ export const getAllBannersForAdmin = async (req, res) => {
 export const getActiveBanner = async (req, res) => {
   try {
     const banners = await bannerModel.find({ isActive: true }).sort({ createdAt: -1 });
-    const fallbackBanner = {
-      subHeading: "Welcome to our platform",
-      headings: [{ text: "Main heading" }],
-      description: "Banner description",
-      guestButtonText: "SIGN UP NOW",
-      authButtonText: "Start your journey",
-      image: {
-        url: defaultImages.url,
-        public_id: defaultImages.public_id,
-      },
-      isActive: true,
-    };
+
+    if (banners.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No active banner section found",
+        empty: true,
+        data: []
+      });
+    }
 
     return res.status(200).json({
       success: true,
       message: "Active banner sections retrieved successfully",
-      data: banners.length > 0 ? banners : [fallbackBanner]
+      empty: false,
+      data: banners
     });
   } catch (error) {
     console.error("getActiveBanner error:", error);
@@ -213,6 +211,13 @@ export const getActiveBanner = async (req, res) => {
 export const deleteBanner = async (req, res) => {
   try {
     const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid banner id",
+          });
+        }
 
     const banner = await bannerModel.findById(id);
 
@@ -269,6 +274,14 @@ export const deleteBanner = async (req, res) => {
 export const updateBanner = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid banner id",
+      });
+    }
+
     const {
       headings,
       subHeading,

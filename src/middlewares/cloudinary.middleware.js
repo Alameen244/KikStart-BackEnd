@@ -16,21 +16,27 @@ const safeUnlink = async (filePath) => {
   }
 };
 
-export const uploadOnCloudinary = async (filePath, folder) => {
-  try {
-    if (!filePath) throw new Error("File path is required");
+const isRemoteUrl = (value) =>
+  typeof value === "string" && /^https?:\/\//i.test(value.trim());
 
-    const response = await cloudinary.uploader.upload(filePath, {
+export const uploadOnCloudinary = async (source, folder) => {
+  try {
+    if (!source) throw new Error("Upload source is required");
+
+    const normalizedSource = typeof source === "string" ? source.trim() : source;
+    const response = await cloudinary.uploader.upload(normalizedSource, {
       resource_type: "auto",
       folder,
     });
-      console.log("on Cloudinary:", response.secure_url);
-    console.log("on Cloudinary:", response.public_id);
 
-    await safeUnlink(filePath);
+    if (!isRemoteUrl(normalizedSource)) {
+      await safeUnlink(normalizedSource);
+    }
     return response;
   } catch (error) {
-    await safeUnlink(filePath);
+    if (!isRemoteUrl(source)) {
+      await safeUnlink(source);
+    }
     throw error;
   }
 };

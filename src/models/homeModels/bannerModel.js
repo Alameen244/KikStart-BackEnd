@@ -1,26 +1,12 @@
 import mongoose from "mongoose";
-import { defaultImages } from "../../constants/defaultImages.js";
+import { defaultImageValue, imageSchema } from "../shared/imageSchema.js";
 
-export const bannerImageSchema = new mongoose.Schema(
-    {
-        url: {
-            type: String,
-            trim: true,
-            default: defaultImages.url,
-        },
-        public_id: {
-            type: String,
-            trim: true,
-            default: defaultImages.public_id,
-        },
-    },
-    { _id: false }
-);
+export const bannerImageSchema = imageSchema;
 
 const bannerSchema = new mongoose.Schema(
     {
         subHeading: {
-            type: String,
+            type: String,  
             required: true,
             trim: true,
             default: "Welcome to our platform",
@@ -54,14 +40,15 @@ const bannerSchema = new mongoose.Schema(
         },
         image: {
             type: bannerImageSchema,
-            default: {
-                url: defaultImages.url,
-                public_id: defaultImages.public_id,
-            },
+            default: defaultImageValue,
         },
         isActive: {
             type: Boolean,
             default: true,
+        },
+        isEmpty: {
+            type: Boolean,
+            default: false,
         },
     },
     { timestamps: true }

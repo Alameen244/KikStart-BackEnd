@@ -60,6 +60,10 @@ const whoSchema = new mongoose.Schema(
             type: Boolean,
             default: true,
         },
+        isEmpty: {
+            type: Boolean,
+            default: false,
+        },
     },
     { timestamps: true }
 );
