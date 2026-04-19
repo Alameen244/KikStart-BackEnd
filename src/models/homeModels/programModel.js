@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { defaultImageValue, imageSchema } from "../shared/imageSchema.js";
 
-const PROGRAM_SECTION_KEY = "faq-section";
+const PROGRAM_SECTION_KEY = "program-section";
 
 export const programImageSchema = imageSchema;
 
@@ -16,10 +16,21 @@ export const programCardSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+    },
+    ProgramDetails: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    images: {
+      type: [programImageSchema],
+      validate: {
+        validator: function (val) {
+          return val.length <= 5;
         },
-      image: {
-      type: programImageSchema,
-      default: defaultImageValue,
+        message: "Maximum 5 images allowed",
+      },
+      default: [defaultImageValue],
     },
     isActive: {
       type: Boolean,
@@ -45,13 +56,13 @@ const programSectionSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      default: "Frequently Asked Questions",
+      default: "Programs",
     },
     subheading: {
       type: String,
       required: true,
       trim: true,
-      default: "FAQs",
+      default: "Programs",
     },
 
     homeLimit: {

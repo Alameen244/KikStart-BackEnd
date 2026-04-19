@@ -10,8 +10,8 @@ const sectionFilter = { singletonKey: PROGRAM_SECTION_KEY };
 
 const sectionDefaults = {
   singletonKey: PROGRAM_SECTION_KEY,
-  heading: "Frequently Asked Questions",
-  subheading: "FAQs",
+  heading: "Programs",
+  subheading: "Programs",
   homeLimit: 4,
 };
 
@@ -146,8 +146,8 @@ export const createProgram = async (req, res) => {
     const {
       title,
       description,
-      imageUrl,
-      imagePublicId,
+      ProgramDetails,
+      images,
       isActive,
       order,
     } = req.body;
@@ -166,9 +166,17 @@ export const createProgram = async (req, res) => {
       });
     }
 
+    if (!ProgramDetails?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "ProgramDetails is required",
+      });
+    }
+
     const programData = {
       title: title.trim(),
       description: description.trim(),
+      ProgramDetails: ProgramDetails.trim(),
       order: typeof order === "number" ? order : 0,
     };
 
@@ -176,17 +184,30 @@ export const createProgram = async (req, res) => {
       programData.isActive = isActive;
     }
 
-    if (imageUrl !== undefined || imagePublicId !== undefined) {
-      const image = buildImageData(imageUrl, imagePublicId, "image");
-      if (image?.error) {
+    if (Array.isArray(images)) {
+      if (images.length > 5) {
         return res.status(400).json({
           success: false,
-          message: image.error,
+          message: "Max 5 images allowed",
         });
       }
-      if (image) {
-        programData.image = image;
+
+      const processedImages = [];
+
+      for (let img of images) {
+        const image = buildImageData(img.url, img.public_id, "image");
+
+        if (image?.error) {
+          return res.status(400).json({
+            success: false,
+            message: image.error,
+          });
+        }
+
+        if (image) processedImages.push(image);
       }
+
+      programData.images = processedImages;
     }
 
     const updatedSection = await programSectionModel.findOneAndUpdate(
@@ -225,8 +246,8 @@ export const updateProgram = async (req, res) => {
     const {
       title,
       description,
-      imageUrl,
-      imagePublicId,
+      ProgramDetails,
+      images,
       isActive,
       order,
     } = req.body;
@@ -260,6 +281,16 @@ export const updateProgram = async (req, res) => {
       updateData["programs.$.description"] = description.trim();
     }
 
+    if (typeof ProgramDetails === "string") {
+      if (!ProgramDetails.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "ProgramDetails cannot be empty",
+        });
+      }
+      updateData["programs.$.ProgramDetails"] = ProgramDetails.trim();
+    }
+
     if (typeof isActive === "boolean") {
       updateData["programs.$.isActive"] = isActive;
     }
@@ -268,17 +299,30 @@ export const updateProgram = async (req, res) => {
       updateData["programs.$.order"] = order;
     }
 
-    if (imageUrl !== undefined || imagePublicId !== undefined) {
-      const image = buildImageData(imageUrl, imagePublicId, "image");
-      if (image?.error) {
+    if (Array.isArray(images)) {
+      if (images.length > 5) {
         return res.status(400).json({
           success: false,
-          message: image.error,
+          message: "Max 5 images allowed",
         });
       }
-      if (image) {
-        updateData["programs.$.image"] = image;
+
+      const processedImages = [];
+
+      for (let img of images) {
+        const image = buildImageData(img.url, img.publicId, "image");
+
+        if (image?.error) {
+          return res.status(400).json({
+            success: false,
+            message: image.error,
+          });
+        }
+
+        if (image) processedImages.push(image);
       }
+
+      updateData["programs.$.images"] = processedImages;
     }
 
     if (Object.keys(updateData).length === 0) {
