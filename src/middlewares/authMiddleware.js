@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 
-const middleware = (req, res, next) => {
+const authMiddleware = (req, res, next) => {
     const authorization = req.headers.authorization
     if (!authorization) return res.status(401).json({ error: 'Token not found' });
 
@@ -24,4 +24,4 @@ const generateToken = (userData) => {
     return jwt.sign(userData, process.env.SECRET_KEY, { expiresIn: process.env.TOKEN_EXPIRY || '7d' });
 }
 
-export { middleware, generateToken };
+export { authMiddleware, generateToken };

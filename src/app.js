@@ -29,6 +29,7 @@ import testimonialRoutes from './routes/homeRoutes/testimonialRoutes.js';
 import gymCardSectionRoutes from './routes/homeRoutes/gymCardSectionRoutes.js';
 import faqSectionRoutes from './routes/homeRoutes/faqSectionRoutes.js';
 import programRoutes from './routes/homeRoutes/programRoutes.js';
+import roleAndPermissionRoutes from './routes/role & permission/roleAndPermissionRoutes.js';
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/image', imageRoutes);
 app.use('/api/v1/banner', bannerRoutes);
@@ -37,5 +38,6 @@ app.use('/api/v1/testimonials', testimonialRoutes);
 app.use('/api/v1/gym-cards', gymCardSectionRoutes);
 app.use('/api/v1/faqs', faqSectionRoutes);
 app.use('/api/v1/programs', programRoutes);
+app.use('/api/v1/roles', roleAndPermissionRoutes);
 
 export default app;

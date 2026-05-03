@@ -1,20 +1,62 @@
 import express from "express";
 const authRouter = express.Router();
 
-import { signUp, login, resetPassword, sendOTP, verifyForgotOTP, verifySignUpOTP, forgotPassword, resendOTP, me } from '../controllers/authController.js';
+import { signUp, login, resetPassword, sendOTP, verifyForgotOTP, verifySignUpOTP, forgotPassword, resendOTP, me , createSubAdmin, getSubAdmins, assignPermissionRole, getAllUsers , getUserById, deleteUserById } from '../controllers/authController.js';
 import { otpRateLimiter } from '../middlewares/otpRateLimiter.js';
-import { middleware } from '../middlewares/authMiddleware.js';
+import { authMiddleware } from '../middlewares/authMiddleware.js';
+import checkPermission from "../middlewares/checkPermissionMiddleware.js";
 
-
-authRouter.post("/signUp", signUp);
-authRouter.post("/login", login);
-authRouter.post("/resetPassword", middleware, resetPassword);
+// middleware add korte hobe admin auth implement r por
+authRouter.post("/signUp",  signUp);
+authRouter.post("/login",  login);
+authRouter.post("/resetPassword", resetPassword);
 authRouter.post("/sendOTP", otpRateLimiter, sendOTP);
-authRouter.post("/verifyForgotOTP", otpRateLimiter, verifyForgotOTP);
-authRouter.post("/verifySignUpOTP", otpRateLimiter, verifySignUpOTP);
-authRouter.post("/forgotPassword", forgotPassword);
+authRouter.post("/verifyForgotOTP",  verifyForgotOTP);
+authRouter.post("/verifySignUpOTP",  verifySignUpOTP);
+authRouter.post("/forgotPassword",  forgotPassword);
 authRouter.post("/resendOtp", otpRateLimiter, resendOTP);
-authRouter.get("/me", middleware, me);
-
+authRouter.get("/me", authMiddleware, me);
+authRouter.post(
+  "/subadmins",
+  authMiddleware,
+  checkPermission("Role Management", "create"),
+  createSubAdmin,
+);
+authRouter.get(
+  "/subadmins",
+  authMiddleware,
+  checkPermission("Role Management", "read"),
+  getSubAdmins,
+);
+authRouter.put(
+  "/subadmins/:id/permission-role",
+  authMiddleware,
+  checkPermission("Role Management", "update"),
+  assignPermissionRole,
+);
+authRouter.delete(
+  "/subadmins/:id",
+  authMiddleware,
+  checkPermission("Role Management", "delete"),
+  deleteUserById,
+);
+authRouter.get(
+  "/",
+  authMiddleware,
+  checkPermission("User Management", "read"),
+  getAllUsers,
+);
+authRouter.get(
+  "/:id",
+  authMiddleware,
+  checkPermission("User Management", "read"),
+  getUserById,
+);
+authRouter.delete(
+  "/:id",
+  authMiddleware,
+  checkPermission("User Management", "delete"),
+  deleteUserById,
+);
 
 export default authRouter;

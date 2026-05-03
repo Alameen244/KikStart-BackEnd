@@ -1,5 +1,5 @@
 
-import { Schema, model } from "mongoose";
+import mongoose, { Schema, model } from "mongoose";
 
 const authSchema = new Schema(
     {
@@ -32,13 +32,18 @@ const authSchema = new Schema(
             expires: 0,
             default: null
         },
-        phone: { type: String, required: true },
-        pinCode: { type: String, required: true },
-        location: { type: String, required: true },
+        phone: { type: String, default: null },
+        pinCode: { type: String, default: null },
+        location: { type: String, default: null },
         role:{
             type: String,
-            enum: ["user", "admin"],
+            enum: ["user", "admin","subAdmin"],
             default: "user"
+        },
+        permissionRole: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "role",
+            default: null
         }
     },
     {
