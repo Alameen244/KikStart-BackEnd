@@ -1,5 +1,6 @@
 
 import mongoose, { Schema, model } from "mongoose";
+import { childrenSchema } from "./childrenModel.js";
 
 const authSchema = new Schema(
     {
@@ -43,6 +44,10 @@ const authSchema = new Schema(
         permissionRole: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "role",
+            default: null
+        },
+        childrens: {
+            type: [childrenSchema],
             default: null
         }
     },
