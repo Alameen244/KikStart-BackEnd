@@ -18,6 +18,7 @@ const schoolDetailsSchema = new mongoose.Schema(
   { _id: false }
 );
 
+
 export const childrenSchema = new mongoose.Schema(
   {
     fullName: {
@@ -91,6 +92,11 @@ export const childrenSchema = new mongoose.Schema(
       type: schoolDetailsSchema,
       required: true,
     },
+    waiverAcceptance: {
+      type: Boolean,
+      default: false,
+      required: true,
+    }
   },
   {
     timestamps: true,

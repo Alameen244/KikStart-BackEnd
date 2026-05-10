@@ -36,9 +36,9 @@ const authSchema = new Schema(
         phone: { type: String, default: null },
         pinCode: { type: String, default: null },
         location: { type: String, default: null },
-        role:{
+        role: {
             type: String,
-            enum: ["user", "admin","subAdmin"],
+            enum: ["user", "admin", "subAdmin"],
             default: "user"
         },
         permissionRole: {
@@ -49,6 +49,39 @@ const authSchema = new Schema(
         childrens: {
             type: [childrenSchema],
             default: null
+        },
+        subscription: {
+            status: {
+                type: String,
+                enum: ["inactive", "active", "cancelled"],
+                default: "inactive"
+            },
+
+            plan: {
+                type: String,
+                enum: ["basic", "professional", "advanced"],
+                default: null
+            },
+
+            stripeCustomerId: {
+                type: String,
+                default: null
+            },
+
+            stripeSubscriptionId: {
+                type: String,
+                default: null
+            },
+
+            startDate: {
+                type: Date,
+                default: null
+            },
+
+            endDate: {
+                type: Date,
+                default: null
+            }
         }
     },
     {

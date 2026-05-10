@@ -103,6 +103,7 @@ const signUp = async (req, res) => {
     try {
         const data = req.body;
         const email = normalizeEmail(data.email);
+        const childrens = Array.isArray(data.childrens) ? data.childrens : null;
 
         if (!email || !data.password || !data.name || !data.phone || !data.pinCode || !data.location) {
             return res.status(400).json({
@@ -143,6 +144,7 @@ const signUp = async (req, res) => {
                 phone: data.phone,
                 pinCode: data.pinCode,
                 location: data.location,
+                childrens,
                 isVerified: false,
                 forgotOtpVerification: false,
                 pendingExpiryAt: pendingExpiryDate()
@@ -166,7 +168,8 @@ const signUp = async (req, res) => {
                 user: {
                     _id: user._id,
                     name: user.name,
-                    email: user.email
+                    email: user.email,
+                    childrens: user.childrens
                 }
             }
         });
@@ -620,6 +623,8 @@ const me = async (req, res) => {
                 id: user._id,
                 name: user.name,
                 email: user.email,
+                childrens: user.childrens,
+                subscription: user.subscription,
                 role: user.role,
                 isVerified: user.isVerified,
                 permissionRole: user.permissionRole || null,
@@ -671,6 +676,7 @@ const createSubAdmin = async (req, res) => {
             otpExpiry: undefined,
             forgotOtpVerification: false,
             permissionRole: null,
+            childrens: null,
         });
 
         let emailDelivered = true;

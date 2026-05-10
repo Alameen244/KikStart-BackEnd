@@ -2,6 +2,7 @@ import express from "express";
 const authRouter = express.Router();
 
 import { signUp, login, resetPassword, sendOTP, verifyForgotOTP, verifySignUpOTP, forgotPassword, resendOTP, me , createSubAdmin, getSubAdmins, assignPermissionRole, getAllUsers , getUserById, deleteUserById } from '../controllers/authController.js';
+import { createChildren, deleteChildren, getAllChildrens, getChildrenById, updateChildren } from "../controllers/childrenController.js";
 import { otpRateLimiter } from '../middlewares/otpRateLimiter.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 import checkPermission from "../middlewares/checkPermissionMiddleware.js";
@@ -16,6 +17,11 @@ authRouter.post("/verifySignUpOTP",  verifySignUpOTP);
 authRouter.post("/forgotPassword",  forgotPassword);
 authRouter.post("/resendOtp", otpRateLimiter, resendOTP);
 authRouter.get("/me", authMiddleware, me);
+authRouter.post("/children", authMiddleware, createChildren);
+authRouter.get("/children", authMiddleware, getAllChildrens);
+authRouter.get("/children/:childrenId", authMiddleware, getChildrenById);
+authRouter.put("/children/:childrenId", authMiddleware, updateChildren);
+authRouter.delete("/children/:childrenId", authMiddleware, deleteChildren);
 authRouter.post(
   "/subadmins",
   authMiddleware,

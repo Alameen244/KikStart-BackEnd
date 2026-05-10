@@ -3,6 +3,10 @@ const app = express();
 import cors from 'cors';
 
 import './Jobs/cloudinaryCleanup.job.js';
+app.use(
+    "/api/v1/subs/webhook",
+    express.raw({ type: "application/json" })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -30,6 +34,8 @@ import gymCardSectionRoutes from './routes/homeRoutes/gymCardSectionRoutes.js';
 import faqSectionRoutes from './routes/homeRoutes/faqSectionRoutes.js';
 import programRoutes from './routes/homeRoutes/programRoutes.js';
 import roleAndPermissionRoutes from './routes/role & permission/roleAndPermissionRoutes.js';
+import subscriptionRouter from './routes/subscriptionRoutes.js';
+
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/image', imageRoutes);
 app.use('/api/v1/banner', bannerRoutes);
@@ -39,5 +45,5 @@ app.use('/api/v1/gym-cards', gymCardSectionRoutes);
 app.use('/api/v1/faqs', faqSectionRoutes);
 app.use('/api/v1/programs', programRoutes);
 app.use('/api/v1/roles', roleAndPermissionRoutes);
-
+app.use('/api/v1/subs', subscriptionRouter)
 export default app;
