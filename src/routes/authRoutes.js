@@ -1,7 +1,7 @@
 import express from "express";
 const authRouter = express.Router();
 
-import { signUp, login, resetPassword, sendOTP, verifyForgotOTP, verifySignUpOTP, forgotPassword, resendOTP, me , createSubAdmin, getSubAdmins, assignPermissionRole, getAllUsers , getUserById, deleteUserById } from '../controllers/authController.js';
+import { signUp, login, googleAuth, resetPassword, sendOTP, verifyForgotOTP, verifySignUpOTP, forgotPassword, resendOTP, me , createSubAdmin, getSubAdmins, assignPermissionRole, getAllUsers , getUserById, deleteUserById } from '../controllers/authController.js';
 import { createChildren, deleteChildren, getAllChildrens, getChildrenById, updateChildren } from "../controllers/childrenController.js";
 import { otpRateLimiter } from '../middlewares/otpRateLimiter.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
@@ -10,6 +10,7 @@ import checkPermission from "../middlewares/checkPermissionMiddleware.js";
 // middleware add korte hobe admin auth implement r por
 authRouter.post("/signUp",  signUp);
 authRouter.post("/login",  login);
+authRouter.get("/google", googleAuth);
 authRouter.post("/resetPassword", resetPassword);
 authRouter.post("/sendOTP", otpRateLimiter, sendOTP);
 authRouter.post("/verifyForgotOTP",  verifyForgotOTP);

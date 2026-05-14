@@ -10,6 +10,8 @@ import loginSuccessTemplate from "../Templates/loginSuccessTemplate.js";
 import registerSuccessTemplate from "../Templates/registerSuccessTemplate.js";
 import Role from "../models/role & permission/RoleAndPermissionModel.js";
 import { subAdminWelcomeTemplate } from "../Templates/subAdminCreateTemplate.js";
+import { defaultImageValue } from "../models/shared/imageSchema.js";
+import { exchangeGoogleCodeForTokens, fetchGoogleUserProfile } from "../utils/googleClient.js";
 
 const normalizeEmail = (email) => email?.trim().toLowerCase();
 const pendingExpiryDate = () => new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -91,12 +93,18 @@ const sanitizeSubAdminPayload = (user) => ({
     id: user?._id,
     name: user?.name,
     email: user?.email,
+    profileImage: user?.profileImage,
     role: user?.role,
     isVerified: user?.isVerified,
     permissionRole: user?.permissionRole,
     createdAt: user?.createdAt,
     updatedAt: user?.updatedAt,
 });
+
+const shouldReplaceProfileImage = (profileImage) => {
+    if (!profileImage?.url) return true;
+    return profileImage.url === defaultImageValue.url;
+};
 
 // sign-up
 const signUp = async (req, res) => {
@@ -237,6 +245,87 @@ const login = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Login failed"
+        });
+    }
+};
+
+const googleAuth = async (req, res) => {
+    try {
+        const code = req.query.code;
+
+        if (!code) {
+            return res.status(400).json({
+                success: false,
+                message: "Google authorization code is required"
+            });
+        }
+
+        const tokens = await exchangeGoogleCodeForTokens(code);
+        const googleUser = await fetchGoogleUserProfile(tokens.access_token);
+
+        const email = normalizeEmail(googleUser?.email);
+        const name = googleUser?.name?.trim();
+        const picture = googleUser?.picture?.trim();
+
+        if (!email || !name) {
+            return res.status(400).json({
+                success: false,
+                message: "Failed to fetch Google account details"
+            });
+        }
+
+        let user = await AuthModel.findOne({ email }).select("+password");
+
+        if (!user) {
+            const generatedPassword = generateRandomPassword();
+            const hashedPassword = await bcrypt.hash(generatedPassword, 10);
+
+            user = await AuthModel.create({
+                name,
+                email,
+                password: hashedPassword,
+                isVerified: true,
+                forgotOtpVerification: false,
+                profileImage: picture
+                    ? { url: picture, public_id: "google-oauth" }
+                    : defaultImageValue,
+                phone: null,
+                pinCode: null,
+                location: null,
+                childrens: null,
+                pendingExpiryAt: null,
+            });
+        } else {
+            user.name = user.name || name;
+            user.isVerified = true;
+            user.pendingExpiryAt = undefined;
+            user.otp = undefined;
+            user.otpExpiry = undefined;
+            user.forgotOtpVerification = false;
+
+            if (picture && shouldReplaceProfileImage(user.profileImage)) {
+                user.profileImage = {
+                    url: picture,
+                    public_id: "google-oauth",
+                };
+            }
+
+            await user.save();
+        }
+
+        const token = signToken(user);
+
+        return res.status(200).json({
+            success: true,
+            message: "Login successful",
+            token,
+            data: sanitizeUser(user)
+        });
+    } catch (error) {
+        console.error("googleAuth error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Google login failed"
         });
     }
 };
@@ -623,6 +712,9 @@ const me = async (req, res) => {
                 id: user._id,
                 name: user.name,
                 email: user.email,
+                profileImage: user.profileImage,
+                phone: user.phone,
+                location: user.location,
                 childrens: user.childrens,
                 subscription: user.subscription,
                 role: user.role,
@@ -879,6 +971,7 @@ const deleteUserById = async (req, res) => {
 export {
     signUp,
     login,
+    googleAuth,
     resetPassword,
     sendOTP,
     forgotPassword,

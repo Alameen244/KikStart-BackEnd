@@ -1,6 +1,7 @@
 
 import mongoose, { Schema, model } from "mongoose";
 import { childrenSchema } from "./childrenModel.js";
+import { defaultImageValue, imageSchema } from "./shared/imageSchema.js";
 
 const authSchema = new Schema(
     {
@@ -19,6 +20,10 @@ const authSchema = new Schema(
         name: {
             type: String,
             required: true
+        },
+        profileImage: {
+            type: imageSchema,
+            default: defaultImageValue
         },
         otp: {
             type: String
