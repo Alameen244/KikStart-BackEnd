@@ -217,7 +217,7 @@ const login = async (req, res) => {
                 message: "Please verify your email first"
             });
         }
-
+     
         const isMatch = await bcrypt.compare(data.password, existingUser.password);
         if (!isMatch) {
             return res.status(401).json({
@@ -704,7 +704,7 @@ const me = async (req, res) => {
                 success: false,
                 message: "User not found"
             });
-        }       
+        }
 
         return res.status(200).json({
             success: true,
