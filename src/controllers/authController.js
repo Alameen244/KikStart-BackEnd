@@ -8,8 +8,6 @@ import otpTemplate from "../Templates/otpTemplate.js";
 import resetTemplate from "../Templates/resetTemplate.js";
 import loginSuccessTemplate from "../Templates/loginSuccessTemplate.js";
 import registerSuccessTemplate from "../Templates/registerSuccessTemplate.js";
-import Role from "../models/role & permission/RoleAndPermissionModel.js";
-import { subAdminWelcomeTemplate } from "../Templates/subAdminCreateTemplate.js";
 import { defaultImageValue } from "../models/shared/imageSchema.js";
 import { exchangeGoogleCodeForTokens, fetchGoogleUserProfile } from "../utils/googleClient.js";
 
@@ -88,18 +86,6 @@ const sanitizeUser = (user) => {
     delete obj.forgotOtpVerification;
     return obj;
 };
-
-const sanitizeSubAdminPayload = (user) => ({
-    id: user?._id,
-    name: user?.name,
-    email: user?.email,
-    profileImage: user?.profileImage,
-    role: user?.role,
-    isVerified: user?.isVerified,
-    permissionRole: user?.permissionRole,
-    createdAt: user?.createdAt,
-    updatedAt: user?.updatedAt,
-});
 
 const shouldReplaceProfileImage = (profileImage) => {
     if (!profileImage?.url) return true;
@@ -210,6 +196,13 @@ const login = async (req, res) => {
             });
         }
 
+        if (existingUser.role !== "user") {
+            return res.status(403).json({
+                success: false,
+                message: "Please use admin login"
+            });
+        }
+
         // isVerified check
         if (!existingUser.isVerified) {
             return res.status(403).json({
@@ -275,6 +268,13 @@ const googleAuth = async (req, res) => {
         }
 
         let user = await AuthModel.findOne({ email }).select("+password");
+
+        if (user && user.role !== "user") {
+            return res.status(403).json({
+                success: false,
+                message: "Please use admin login"
+            });
+        }
 
         if (!user) {
             const generatedPassword = generateRandomPassword();
@@ -731,152 +731,14 @@ const me = async (req, res) => {
     }
 };
 
-const createSubAdmin = async (req, res) => {
-    try {
-        const { name, email } = req.body;
-        const normalizedEmail = normalizeEmail(email);
-
-        if (!name?.trim() || !normalizedEmail) {
-            return res.status(400).json({
-                success: false,
-                message: "Name and email are required",
-            });
-        }
-
-        const existingUser = await AuthModel.findOne({ email: normalizedEmail });
-        if (existingUser) {
-            return res.status(400).json({
-                success: false,
-                message: "User already exists",
-            });
-        }
-
-        const generatedPassword = generateRandomPassword();
-        const hashedPassword = await bcrypt.hash(generatedPassword, 10);
-
-        const newSubAdmin = await AuthModel.create({
-            name: name.trim(),
-            email: normalizedEmail,
-            password: hashedPassword,
-            role: "subAdmin",
-            isVerified: true,
-            phone: null,
-            pinCode: null,
-            location: null,
-            pendingExpiryAt: null,
-            otp: undefined,
-            otpExpiry: undefined,
-            forgotOtpVerification: false,
-            permissionRole: null,
-            childrens: null,
-        });
-
-        let emailDelivered = true;
-        try {
-            await sendEmail({
-                to: normalizedEmail,
-                subject: "Your Kikstart Subadmin Account",
-                text: `Hi ${newSubAdmin.name}, your subadmin account is ready. Temporary password: ${generatedPassword}`,
-                html: subAdminWelcomeTemplate(newSubAdmin.name, generatedPassword , newSubAdmin.email),
-            });
-        } catch (mailError) {
-            emailDelivered = false;
-            console.error("createSubAdmin email error:", mailError);
-        }
-
-        return res.status(201).json({
-            success: true,
-            message: emailDelivered
-                ? "Subadmin created successfully"
-                : "Subadmin created, but email could not be sent",
-            data: {
-                ...sanitizeSubAdminPayload(newSubAdmin),
-                emailDelivered,
-            },
-        });
-    } catch (error) {
-        console.error("createSubAdmin error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to create subadmin",
-        });
-    }
-};
-
-const getSubAdmins = async (_req, res) => {
-    try {
-        const subAdmins = await AuthModel.find({ role: "subAdmin" })
-            .populate("permissionRole")
-            .select("-password -otp -otpExpiry -forgotOtpVerification -pendingExpiryAt")
-            .sort({ createdAt: -1 });
-
-        return res.status(200).json({
-            success: true,
-            count: subAdmins.length,
-            data: subAdmins,
-        });
-    } catch (error) {
-        console.error("getSubAdmins error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch subadmins",
-        });
-    }
-};
-
-const assignPermissionRole = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { permissionRoleId } = req.body;
-
-        if (!id || !permissionRoleId) {
-            return res.status(400).json({
-                success: false,
-                message: "User id and permissionRoleId are required",
-            });
-        }
-
-        const role = await Role.findById(permissionRoleId);
-        if (!role) {
-            return res.status(404).json({
-                success: false,
-                message: "Role not found",
-            });
-        }
-
-        const subAdmin = await AuthModel.findOneAndUpdate(
-            { _id: id, role: "subAdmin" },
-            { permissionRole: role._id },
-            { new: true },
-        )
-            .populate("permissionRole")
-            .select("-password -otp -otpExpiry -forgotOtpVerification -pendingExpiryAt");
-
-        if (!subAdmin) {
-            return res.status(404).json({
-                success: false,
-                message: "Subadmin not found",
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            message: "Role assigned successfully",
-            data: subAdmin,
-        });
-    } catch (error) {
-        console.error("assignPermissionRole error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to assign role",
-        });
-    }
-};
-
-// get all users (admin only)
 const getAllUsers = async (req, res) => {
     try {
-        const users = await AuthModel.find({ isVerified: true })
+        const currentUserId = req.jwtPayload?.id;
+        const users = await AuthModel.find({
+            _id: { $ne: currentUserId },
+            isVerified: true,
+            role: "user",
+        })
             .select("-password -otp -otpExpiry -forgotOtpVerification -pendingExpiryAt")
             .sort({ createdAt: -1 });
 
@@ -884,86 +746,13 @@ const getAllUsers = async (req, res) => {
             success: true,
             message: users.length ? "Users fetched successfully" : "No users found",
             count: users.length,
-            data: users
+            data: users,
         });
     } catch (error) {
         console.error("getAllUsers error:", error);
         return res.status(500).json({
             success: false,
             message: "Failed to fetch users"
-        });
-    }
-};
-
-// get user by id
-const getUserById = async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        if (!id) {
-            return res.status(400).json({
-                success: false,
-                message: "Please provide a user id"
-            });
-        }
-
-        const user = await AuthModel.findById(id)
-            .select("-password -otp -otpExpiry -forgotOtpVerification -pendingExpiryAt");
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            message: "User fetched successfully",
-            data: user
-        });
-    } catch (error) {
-        console.error("getUserById error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch user"
-        });
-    }
-};
-
-// delete user by id
-const deleteUserById = async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        if (!id) {
-            return res.status(400).json({
-                success: false,
-                message: "Please provide a user id"
-            });
-        }
-
-        const deletedUser = await AuthModel.findByIdAndDelete(id);
-
-        if (!deletedUser) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            message: "User deleted successfully",
-            data: {
-                id: deletedUser._id
-            }
-        });
-    } catch (error) {
-        console.error("deleteUserById error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to delete user"
         });
     }
 };
@@ -979,10 +768,5 @@ export {
     verifyForgotOTP,
     resendOTP,
     me,
-    createSubAdmin,
-    getSubAdmins,
-    assignPermissionRole,
     getAllUsers,
-    getUserById,
-    deleteUserById
 };
