@@ -1,5 +1,19 @@
 import { client, SERVICE_SID } from "../config/twilio.js";
 import twilio from "twilio";
+
+const formatTwilioDate = (dateValue) => {
+  if (!dateValue) return new Date().toISOString();
+  const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+};
+
+const serializeMessage = (message) => ({
+  sid: message.sid,
+  author: message.author,
+  body: message.body || "",
+  dateCreated: formatTwilioDate(message.dateCreated),
+});
+
 export const createConversation = async (req, res) => {
   try {
     const { friendlyName } = req.body;
@@ -96,7 +110,10 @@ export const sendMessage = async (req, res) => {
     res.status(201).json({
       success: true,
       messageSid: msg.sid,
+      sid: msg.sid,
+      author: msg.author,
       body: msg.body,
+      dateCreated: formatTwilioDate(msg.dateCreated),
     });
   } catch (error) {
     res.status(500).json({
@@ -112,9 +129,50 @@ export const getMessages = async (req, res) => {
       .services(SERVICE_SID)
       .conversations(conversationSid)
       .messages.list({ limit: 50 });
-    res.status(200).json(messages);
+    res.status(200).json(messages.map(serializeMessage));
   } catch (error) {
     res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
+export const getConversationByParticipants = async (req, res) => {
+  try {
+    const { identity1, identity2 } = req.query;
+
+    if (!identity1 || !identity2) {
+      return res.status(400).json({
+        success: false,
+        message: "identity1 and identity2 are required",
+      });
+    }
+
+    const conversations = await client.conversations.v1
+      .services(SERVICE_SID)
+      .conversations.list({ limit: 100 });
+
+    for (const conversation of conversations) {
+      const participants = await client.conversations.v1
+        .services(SERVICE_SID)
+        .conversations(conversation.sid)
+        .participants.list();
+
+      const identities = participants.map((participant) => participant.identity);
+      if (identities.includes(identity1) && identities.includes(identity2)) {
+        return res.status(200).json({
+          success: true,
+          conversationSid: conversation.sid,
+        });
+      }
+    }
+
+    return res.status(404).json({
+      success: false,
+      message: "No conversation found",
+    });
+  } catch (error) {
+    return res.status(500).json({
       success: false,
       error: error.message,
     });
