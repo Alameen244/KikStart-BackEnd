@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import AuthModel from "../models/authModel.js";
+import { getChildrenLimit } from "../utils/subscriptionUtils.js";
 
 const getUserIdFromRequest = (req) => req.params.userId || req.jwtPayload?.id;
 
@@ -118,6 +119,28 @@ export const createChildren = async (req, res) => {
 
     if (!Array.isArray(user.childrens)) {
       user.childrens = [];
+    }
+
+    const subscription = user.subscription;
+
+    if (!subscription || subscription.status !== "active") {
+      return res.status(403).json({
+        success: false,
+        upgradeRequired: true,
+        message: "Active subscription required.",
+      });
+    }
+
+    const maxChildren = getChildrenLimit(subscription.plan);
+    const currentChildren = user.childrens.length;
+
+    // Users may keep/edit existing children after a downgrade, but cannot add over the plan limit.
+    if (currentChildren >= maxChildren) {
+      return res.status(403).json({
+        success: false,
+        upgradeRequired: true,
+        message: `Your ${subscription.plan} plan allows only ${maxChildren} child profile(s).`,
+      });
     }
 
     user.childrens.push(childrenData);

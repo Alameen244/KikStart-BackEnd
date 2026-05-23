@@ -1,6 +1,12 @@
 import stripe from "../config/stripe.js"
 import AuthModel from "../models/authModel.js";
 
+const plans = {
+    basic: 19,
+    professional: 49,
+    advanced: 99
+};
+
 const addOneMonthFromNow = () => {
     const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + 1);
@@ -55,6 +61,7 @@ const updateUserSubscriptionFromSession = async (session) => {
     user.subscription.plan = plan;
     user.subscription.startDate = new Date();
     user.subscription.endDate = subscriptionEndDate;
+    user.subscription.amount = plans[plan] ?? 0;
 
     if (session.customer && !user.subscription.stripeCustomerId) {
         user.subscription.stripeCustomerId =
@@ -86,12 +93,7 @@ export const createCheckoutSession = async (req, res) => {
         }
 
 
-        // PLAN PRICE MAP
-        const plans = {
-            basic: 1900,
-            professional: 4900,
-            advanced: 9900
-        };
+
 
 
         // VALIDATION
