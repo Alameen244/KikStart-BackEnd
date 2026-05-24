@@ -167,8 +167,11 @@ export const getConversationByParticipants = async (req, res) => {
       }
     }
 
-    return res.status(404).json({
-      success: false,
+    // Not finding a conversation is normal before the first message.
+    // Return 200 so the frontend can quietly create one without a console error.
+    return res.status(200).json({
+      success: true,
+      conversationSid: "",
       message: "No conversation found",
     });
   } catch (error) {

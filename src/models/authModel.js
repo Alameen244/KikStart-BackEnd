@@ -70,7 +70,6 @@ const authSchema = new Schema(
             amount:{
                 type: Number,
                 enum:[19,49,99],
-                default: 0
             },
 
             stripeCustomerId: {
