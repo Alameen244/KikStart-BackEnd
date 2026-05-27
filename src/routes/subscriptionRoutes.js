@@ -2,7 +2,8 @@ import express from "express";
 import {
     confirmCheckoutSession,
     createCheckoutSession,
-    stripeWebhook
+    stripeWebhook,
+    getUserTransactions
 } from "../controllers/subscriptionControllers.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 
@@ -26,6 +27,11 @@ subscriptionRouter.post(
     "/webhook",
     express.raw({ type: "application/json" }),
     stripeWebhook
+);
+subscriptionRouter.get(
+    "/transactions",
+    authMiddleware,
+    getUserTransactions
 );
 
 export default  subscriptionRouter ;

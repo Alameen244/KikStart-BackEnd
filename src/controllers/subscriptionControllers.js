@@ -1,5 +1,7 @@
 import stripe from "../config/stripe.js"
 import AuthModel from "../models/authModel.js";
+import TransactionModel from "../models/transactionModel.js";
+
 
 const plans = {
     basic: 19,
@@ -11,6 +13,16 @@ const addOneMonthFromNow = () => {
     const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + 1);
     return endDate;
+};
+
+const getStripeId = (value) => {
+    if (!value) return null;
+    return typeof value === "string" ? value : value.id || null;
+};
+
+const normalizeStripeAmount = (amount) => {
+    if (typeof amount !== "number") return 0;
+    return amount / 100;
 };
 
 const updateUserSubscriptionFromSession = async (session) => {
@@ -59,19 +71,88 @@ const updateUserSubscriptionFromSession = async (session) => {
     }
 
     user.subscription.plan = plan;
-    user.subscription.startDate = new Date();
+    if (!user.subscription.startDate) {
+        user.subscription.startDate = new Date();
+    }
     user.subscription.endDate = subscriptionEndDate;
     user.subscription.amount = plans[plan] ?? 0;
 
     if (session.customer && !user.subscription.stripeCustomerId) {
-        user.subscription.stripeCustomerId =
-            typeof session.customer === "string" ? session.customer : session.customer?.id || null;
+        user.subscription.stripeCustomerId = getStripeId(session.customer);
     }
 
     await user.save();
     return user;
 };
 
+
+// ===============================
+// SAVE TRANSACTION (internal helper)
+// ===============================
+
+const saveTransaction = async (invoice, fallback = {}) => {
+    try {
+        if (!invoice?.id) return null;
+
+        // avoid duplicate transactions
+        const existing = await TransactionModel.findOne({
+            stripeInvoiceId: invoice.id
+        });
+
+        if (existing) {
+            existing.status =
+                invoice.status === "paid"
+                    ? "paid"
+                    : "unpaid";
+
+            await existing.save();
+            return existing;
+        }
+
+        const stripeCustomerId = getStripeId(invoice.customer) || fallback.stripeCustomerId;
+        const invoiceMetadata = invoice.metadata || {};
+        const subscriptionMetadata = invoice.subscription_details?.metadata || {};
+        const userIdFromMetadata =
+            invoiceMetadata.userId ||
+            subscriptionMetadata.userId ||
+            fallback.userId;
+
+        let user = userIdFromMetadata ? await AuthModel.findById(userIdFromMetadata) : null;
+
+        if (!user && stripeCustomerId) {
+            user = await AuthModel.findOne({
+                "subscription.stripeCustomerId": stripeCustomerId
+            });
+        }
+
+        if (!user || !stripeCustomerId) return null;
+
+        const plan =
+            invoiceMetadata.plan ||
+            subscriptionMetadata.plan ||
+            fallback.plan;
+
+        if (!plans[plan]) return null;
+
+        const paidAmount = invoice.amount_paid ?? invoice.total ?? fallback.amount;
+        const amount = normalizeStripeAmount(paidAmount);
+
+        return await TransactionModel.create({
+            userId: user._id,
+            stripeInvoiceId: invoice.id,
+            stripeCustomerId,
+            plan,
+            amount,
+            status: invoice.status === "paid" ? "paid" : "unpaid",
+            invoicePdfUrl: invoice.invoice_pdf || null,
+            billingDate: new Date(invoice.created * 1000)
+        });
+
+    } catch (error) {
+        console.error("Failed to save transaction:", error.message);
+        return null;
+    }
+};
 
 // ===============================
 // CREATE CHECKOUT SESSION
@@ -140,6 +221,13 @@ export const createCheckoutSession = async (req, res) => {
 
             customer: customerId,
 
+            subscription_data: {
+                metadata: {
+                    userId: user._id.toString(),
+                    plan
+                }
+            },
+
             line_items: [
                 {
                     price_data: {
@@ -153,7 +241,7 @@ export const createCheckoutSession = async (req, res) => {
                             interval: "month"
                         },
 
-                        unit_amount: plans[plan]
+                        unit_amount: plans[plan] * 100
                     },
 
                     quantity: 1
@@ -212,14 +300,33 @@ export const stripeWebhook = async (req, res) => {
     }
 
 
-
-    // PAYMENT SUCCESS
+    // checkout completed → update subscription
     if (event.type === "checkout.session.completed") {
-
         const session = event.data.object;
         await updateUserSubscriptionFromSession(session);
     }
 
+    // invoice paid → save transaction
+    if (event.type === "invoice.payment_succeeded") {
+        const invoice = event.data.object;
+        await saveTransaction(invoice);
+    }
+
+    // invoice payment failed
+    if (event.type === "invoice.payment_failed") {
+        const invoice = event.data.object;
+
+        const conditionalUser = await AuthModel.findOne({
+            "subscription.stripeCustomerId": getStripeId(invoice.customer)
+        });
+
+        if (conditionalUser) {
+            conditionalUser.subscription.status = "inactive";
+            await conditionalUser.save();
+        }
+
+        await saveTransaction(invoice);
+    }
     res.json({ received: true });
 };
 
@@ -243,7 +350,7 @@ export const confirmCheckoutSession = async (req, res) => {
         }
 
         const session = await stripe.checkout.sessions.retrieve(sessionId, {
-            expand: ["subscription"],
+            expand: ["subscription", "subscription.latest_invoice"],
         });
 
         if (!session) {
@@ -268,6 +375,20 @@ export const confirmCheckoutSession = async (req, res) => {
         }
 
         const updatedUser = await updateUserSubscriptionFromSession(session);
+        const latestInvoice = session.subscription?.latest_invoice || session.invoice;
+
+        if (latestInvoice) {
+            const invoice =
+                typeof latestInvoice === "string"
+                    ? await stripe.invoices.retrieve(latestInvoice)
+                    : latestInvoice;
+
+            await saveTransaction(invoice, {
+                userId,
+                plan: session.metadata?.plan,
+                stripeCustomerId: getStripeId(session.customer)
+            });
+        }
 
         return res.status(200).json({
             success: true,
@@ -278,6 +399,53 @@ export const confirmCheckoutSession = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: error.message || "Failed to confirm checkout session"
+        });
+    }
+};
+
+// ===============================
+// GET USER TRANSACTIONS
+// ===============================
+
+export const getUserTransactions = async (req, res) => {
+    try {
+        const userId = req.jwtPayload?.id;
+
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = 15;
+        const skip = (page - 1) * limit;
+
+        const totalCount = await TransactionModel.countDocuments({ userId });
+        const totalPages = Math.ceil(totalCount / limit);
+
+        const transactions = await TransactionModel.find({ userId })
+            .sort({ billingDate: -1 }) // latest first
+            .skip(skip)
+            .limit(limit)
+            .select("stripeInvoiceId billingDate amount status plan invoicePdfUrl");
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                transactions,
+                pagination: {
+                    currentPage: page,
+                    totalPages,
+                    totalCount,
+                    hasNextPage: page < totalPages,
+                    hasPrevPage: page > 1
+                }
+            }
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message
         });
     }
 };
