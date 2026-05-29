@@ -731,6 +731,60 @@ const me = async (req, res) => {
     }
 };
 
+const updateUser = async (req, res) => {
+    try {
+        const userId = req.jwtPayload?.id;
+        const { name, phone, location, profileImage } = req.body;
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized"
+            });
+        }
+
+        if (!name?.trim() || !phone?.trim() || !location?.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Name, phone and location are required"
+            });
+        }
+
+        const user = await AuthModel.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        user.name = name.trim();
+        user.phone = phone.trim();
+        user.location = location.trim();
+
+        if (profileImage?.url && profileImage?.public_id) {
+            user.profileImage = {
+                url: profileImage.url,
+                public_id: profileImage.public_id,
+            };
+        }
+
+        await user.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Profile updated successfully",
+            data: sanitizeUser(user)
+        });
+    } catch (error) {
+        console.error("updateUser error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to update profile"
+        });
+    }
+};
+
 const getAllUsers = async (req, res) => {
     try {
         const currentUserId = req.jwtPayload?.id;
@@ -768,5 +822,6 @@ export {
     verifyForgotOTP,
     resendOTP,
     me,
+    updateUser,
     getAllUsers,
 };

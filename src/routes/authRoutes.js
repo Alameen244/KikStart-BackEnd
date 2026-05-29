@@ -1,7 +1,7 @@
 import express from "express";
 const authRouter = express.Router();
 
-import { signUp, login, googleAuth, resetPassword, sendOTP, verifyForgotOTP, verifySignUpOTP, forgotPassword, resendOTP, me, getAllUsers } from '../controllers/authController.js';
+import { signUp, login, googleAuth, resetPassword, sendOTP, verifyForgotOTP, verifySignUpOTP, forgotPassword, resendOTP, me, updateUser, getAllUsers } from '../controllers/authController.js';
 import { createChildren, deleteChildren, getAllChildrens, getChildrenById, updateChildren } from "../controllers/childrenController.js";
 import { otpRateLimiter } from '../middlewares/otpRateLimiter.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
@@ -17,6 +17,7 @@ authRouter.post("/verifySignUpOTP",  verifySignUpOTP);
 authRouter.post("/forgotPassword",  forgotPassword);
 authRouter.post("/resendOtp", otpRateLimiter, resendOTP);
 authRouter.get("/me", authMiddleware, me);
+authRouter.put("/updateUser", authMiddleware, updateUser);
 authRouter.get("/users", authMiddleware, getAllUsers);
 authRouter.post("/children", authMiddleware, createChildren);
 authRouter.get("/children", authMiddleware, getAllChildrens);
