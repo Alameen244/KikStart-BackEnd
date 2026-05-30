@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import stripe from "../config/stripe.js"
 import AuthModel from "../models/authModel.js";
 import TransactionModel from "../models/transactionModel.js";
@@ -424,6 +425,157 @@ export const getUserTransactions = async (req, res) => {
 
         const transactions = await TransactionModel.find({ userId })
             .sort({ billingDate: -1 }) // latest first
+            .skip(skip)
+            .limit(limit)
+            .select("stripeInvoiceId billingDate amount status plan invoicePdfUrl");
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                transactions,
+                pagination: {
+                    currentPage: page,
+                    totalPages,
+                    totalCount,
+                    hasNextPage: page < totalPages,
+                    hasPrevPage: page > 1
+                }
+            }
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+// ===============================
+// ADMIN — GET ALL USERS SUMMARY
+// ===============================
+
+export const getAdminUsersSummary = async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = 20;
+        const skip = (page - 1) * limit;
+
+        // Aggregate: join users with their transactions
+        const result = await AuthModel.aggregate([
+            {
+                $match: {
+                    "subscription.stripeCustomerId": { $ne: null, $exists: true }
+                }
+            },
+            {
+                $lookup: {
+                    from: "transactions",         // MongoDB collection name
+                    localField: "_id",
+                    foreignField: "userId",
+                    as: "transactions"
+                }
+            },
+            {
+                $addFields: {
+                    totalPaid: {
+                        $sum: {
+                            $map: {
+                                input: {
+                                    $filter: {
+                                        input: "$transactions",
+                                        as: "tx",
+                                        cond: { $eq: ["$$tx.status", "paid"] }
+                                    }
+                                },
+                                as: "tx",
+                                in: "$$tx.amount"
+                            }
+                        }
+                    },
+                    transactionCount: { $size: "$transactions" }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    email: 1,
+                    name: 1,
+                    "subscription.plan": 1,
+                    "subscription.status": 1,
+                    "subscription.stripeCustomerId": 1,
+                    totalPaid: 1,
+                    transactionCount: 1
+                }
+            },
+            { $sort: { totalPaid: -1 } },        // highest spenders first
+            {
+                $facet: {
+                    data: [{ $skip: skip }, { $limit: limit }],
+                    totalCount: [{ $count: "count" }]
+                }
+            }
+        ]);
+
+        const users = result[0]?.data || [];
+        const totalCount = result[0]?.totalCount[0]?.count || 0;
+        const totalPages = Math.ceil(totalCount / limit);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                users,
+                pagination: {
+                    currentPage: page,
+                    totalPages,
+                    totalCount,
+                    hasNextPage: page < totalPages,
+                    hasPrevPage: page > 1
+                }
+            }
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+
+// ===============================
+// ADMIN — GET ONE USER'S TRANSACTIONS
+// ===============================
+
+export const getAdminUserTransactions = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: "userId is required"
+            });
+        }
+
+        // validate it's a real ObjectId before hitting DB
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid userId"
+            });
+        }
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = 10;                         // smaller limit — inside an expandable row
+        const skip = (page - 1) * limit;
+
+        const totalCount = await TransactionModel.countDocuments({ userId });
+        const totalPages = Math.ceil(totalCount / limit);
+
+        const transactions = await TransactionModel.find({ userId })
+            .sort({ billingDate: -1 })
             .skip(skip)
             .limit(limit)
             .select("stripeInvoiceId billingDate amount status plan invoicePdfUrl");

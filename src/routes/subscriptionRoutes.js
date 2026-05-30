@@ -3,10 +3,13 @@ import {
     confirmCheckoutSession,
     createCheckoutSession,
     stripeWebhook,
-    getUserTransactions
-} from "../controllers/subscriptionControllers.js";
+    getUserTransactions,
+    getAdminUsersSummary,
+    getAdminUserTransactions
+} from "../controllers/SubscriptionControllers.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
-
+import isAdmin from "../middlewares/isAdminMiddleware.js";
+import checkPermission from "../middlewares/checkPermissionMiddleware.js";
 
 
 const subscriptionRouter = express.Router();
@@ -34,4 +37,6 @@ subscriptionRouter.get(
     getUserTransactions
 );
 
+subscriptionRouter.get("/admin/users-summary",      authMiddleware, isAdmin,checkPermission("Subscriptions", "read"), getAdminUsersSummary);
+subscriptionRouter.get("/admin/user/:userId/transactions", authMiddleware, isAdmin, checkPermission("Subscriptions", "read"), getAdminUserTransactions);
 export default  subscriptionRouter ;
