@@ -601,3 +601,245 @@ export const getAdminUserTransactions = async (req, res) => {
         });
     }
 };
+
+
+// ===============================
+// HELPER
+// ===============================
+
+const getPeriodBounds = (year, month) => {
+    if (month) {
+        const start = new Date(year, month - 1, 1);
+        const end = new Date(year, month, 1);
+        return { start, end };
+    }
+    const start = new Date(year, 0, 1);
+    const end = new Date(year + 1, 0, 1);
+    return { start, end };
+};
+
+// ===============================
+// OVERVIEW STAT CARDS
+// GET /admin/analytics/overview?year=2026&month=5
+// ===============================
+
+export const getAnalyticsOverview = async (req, res) => {
+    try {
+        const year  = parseInt(req.query.year)  || new Date().getFullYear();
+        const month = parseInt(req.query.month) || null;
+
+        const { start, end } = getPeriodBounds(year, month);
+
+        // -- current period --
+        const [current] = await TransactionModel.aggregate([
+            {
+                $match: {
+                    status: "paid",
+                    billingDate: { $gte: start, $lt: end }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalRevenue:      { $sum: "$amount" },
+                    totalTransactions: { $sum: 1 }
+                }
+            }
+        ]);
+
+        // new subscribers in period (first transaction date falls in period)
+        const newSubscribers = await AuthModel.countDocuments({
+            "subscription.startDate": { $gte: start, $lt: end },
+            "subscription.status": { $in: ["active", "cancelled"] }
+        });
+
+        // active subscribers right now
+        const activeSubscribers = await AuthModel.countDocuments({
+            "subscription.status": "active"
+        });
+
+        // -- previous period for MoM / YoY growth --
+        let prevStart, prevEnd;
+        if (month) {
+            prevStart = new Date(year, month - 2, 1);
+            prevEnd   = new Date(year, month - 1, 1);
+        } else {
+            prevStart = new Date(year - 1, 0, 1);
+            prevEnd   = new Date(year, 0, 1);
+        }
+
+        const [prev] = await TransactionModel.aggregate([
+            {
+                $match: {
+                    status: "paid",
+                    billingDate: { $gte: prevStart, $lt: prevEnd }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalRevenue: { $sum: "$amount" }
+                }
+            }
+        ]);
+
+        const currentRevenue = current?.totalRevenue      ?? 0;
+        const prevRevenue    = prev?.totalRevenue         ?? 0;
+
+        const revenueGrowth = prevRevenue === 0
+            ? null   // can't compute % from zero base — frontend shows "N/A"
+            : parseFloat(
+                (((currentRevenue - prevRevenue) / prevRevenue) * 100).toFixed(1)
+              );
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                totalRevenue:      currentRevenue,
+                totalTransactions: current?.totalTransactions ?? 0,
+                newSubscribers,
+                activeSubscribers,
+                revenueGrowth   // null | number (can be negative)
+            }
+        });
+
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ===============================
+// REVENUE CHART
+// GET /admin/analytics/revenue-chart?year=2026&view=monthly
+// view = "monthly" (12 bars for a year) | "yearly" (one bar per year)
+// ===============================
+
+export const getRevenueChart = async (req, res) => {
+    try {
+        const year = parseInt(req.query.year) || new Date().getFullYear();
+        const view = req.query.view === "yearly" ? "yearly" : "monthly";
+
+        let pipeline;
+
+        if (view === "monthly") {
+            pipeline = [
+                {
+                    $match: {
+                        status: "paid",
+                        billingDate: {
+                            $gte: new Date(year, 0, 1),
+                            $lt:  new Date(year + 1, 0, 1)
+                        }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { $month: "$billingDate" },
+                        revenue:      { $sum: "$amount" },
+                        transactions: { $sum: 1 }
+                    }
+                },
+                { $sort: { "_id": 1 } }
+            ];
+
+            const raw = await TransactionModel.aggregate(pipeline);
+
+            // fill all 12 months, even if no data
+            const months = [
+                "Jan","Feb","Mar","Apr","May","Jun",
+                "Jul","Aug","Sep","Oct","Nov","Dec"
+            ];
+
+            const data = months.map((label, i) => {
+                const found = raw.find(r => r._id === i + 1);
+                return {
+                    month: label,
+                    revenue:      found?.revenue      ?? 0,
+                    transactions: found?.transactions ?? 0
+                };
+            });
+
+            return res.status(200).json({ success: true, data, view, year });
+
+        } else {
+            // yearly: group by year, from 2026 onward
+            pipeline = [
+                {
+                    $match: { status: "paid" }
+                },
+                {
+                    $group: {
+                        _id: { $year: "$billingDate" },
+                        revenue:      { $sum: "$amount" },
+                        transactions: { $sum: 1 }
+                    }
+                },
+                { $sort: { "_id": 1 } }
+            ];
+
+            const raw = await TransactionModel.aggregate(pipeline);
+
+            const data = raw.map(r => ({
+                year:         r._id,
+                revenue:      r.revenue,
+                transactions: r.transactions
+            }));
+
+            return res.status(200).json({ success: true, data, view });
+        }
+
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ===============================
+// PLAN DISTRIBUTION (donut)
+// GET /admin/analytics/plan-distribution?year=2026&month=5
+// ===============================
+
+export const getPlanDistribution = async (req, res) => {
+    try {
+        const year  = parseInt(req.query.year)  || new Date().getFullYear();
+        const month = parseInt(req.query.month) || null;
+
+        const { start, end } = getPeriodBounds(year, month);
+
+        const raw = await TransactionModel.aggregate([
+            {
+                $match: {
+                    status: "paid",
+                    billingDate: { $gte: start, $lt: end }
+                }
+            },
+            {
+                $group: {
+                    _id:     "$plan",
+                    revenue: { $sum: "$amount" },
+                    count:   { $sum: 1 }
+                }
+            }
+        ]);
+
+        const total = raw.reduce((sum, r) => sum + r.count, 0);
+
+        const plans = ["basic", "professional", "advanced"];
+
+        const data = plans.map(plan => {
+            const found = raw.find(r => r._id === plan);
+            return {
+                plan,
+                count:      found?.count   ?? 0,
+                revenue:    found?.revenue ?? 0,
+                percentage: total === 0
+                    ? 0
+                    : parseFloat(((( found?.count ?? 0) / total) * 100).toFixed(1))
+            };
+        });
+
+        return res.status(200).json({ success: true, data, total });
+
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};

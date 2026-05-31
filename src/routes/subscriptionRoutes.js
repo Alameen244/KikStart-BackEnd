@@ -5,7 +5,10 @@ import {
     stripeWebhook,
     getUserTransactions,
     getAdminUsersSummary,
-    getAdminUserTransactions
+    getAdminUserTransactions,
+    getAnalyticsOverview,
+    getPlanDistribution,
+    getRevenueChart
 } from "../controllers/SubscriptionControllers.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import isAdmin from "../middlewares/isAdminMiddleware.js";
@@ -37,6 +40,10 @@ subscriptionRouter.get(
     getUserTransactions
 );
 
-subscriptionRouter.get("/admin/users-summary",      authMiddleware, isAdmin,checkPermission("Subscriptions", "read"), getAdminUsersSummary);
+subscriptionRouter.get("/admin/users-summary", authMiddleware, isAdmin, checkPermission("Subscriptions", "read"), getAdminUsersSummary);
 subscriptionRouter.get("/admin/user/:userId/transactions", authMiddleware, isAdmin, checkPermission("Subscriptions", "read"), getAdminUserTransactions);
-export default  subscriptionRouter ;
+
+subscriptionRouter.get("/admin/analytics/overview", authMiddleware, isAdmin, checkPermission("Subscriptions", "read"), getAnalyticsOverview);
+subscriptionRouter.get("/admin/analytics/revenue-chart", authMiddleware, isAdmin, checkPermission("Subscriptions", "read"), getRevenueChart);
+subscriptionRouter.get("/admin/analytics/plan-distribution", authMiddleware, isAdmin, checkPermission("Subscriptions", "read"), getPlanDistribution);
+export default subscriptionRouter;
