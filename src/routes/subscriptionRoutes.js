@@ -8,7 +8,8 @@ import {
     getAdminUserTransactions,
     getAnalyticsOverview,
     getPlanDistribution,
-    getRevenueChart
+    getRevenueChart,
+    getRevenueBreakdown
 } from "../controllers/SubscriptionControllers.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import isAdmin from "../middlewares/isAdminMiddleware.js";
@@ -46,4 +47,11 @@ subscriptionRouter.get("/admin/user/:userId/transactions", authMiddleware, isAdm
 subscriptionRouter.get("/admin/analytics/overview", authMiddleware, isAdmin, checkPermission("Subscriptions", "read"), getAnalyticsOverview);
 subscriptionRouter.get("/admin/analytics/revenue-chart", authMiddleware, isAdmin, checkPermission("Subscriptions", "read"), getRevenueChart);
 subscriptionRouter.get("/admin/analytics/plan-distribution", authMiddleware, isAdmin, checkPermission("Subscriptions", "read"), getPlanDistribution);
+subscriptionRouter.get(
+  "/admin/revenue-breakdown",
+  authMiddleware,
+  isAdmin,
+  checkPermission("Subscriptions", "read"),
+  getRevenueBreakdown
+);
 export default subscriptionRouter;

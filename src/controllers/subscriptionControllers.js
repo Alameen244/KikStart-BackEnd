@@ -843,3 +843,157 @@ export const getPlanDistribution = async (req, res) => {
         return res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// ===============================
+// ADMIN — REVENUE BREAKDOWN
+// GET /api/subscriptions/admin/revenue-breakdown?year=2025&status=paid
+// ===============================
+
+export const getRevenueBreakdown = async (req, res) => {
+  try {
+    const year        = parseInt(req.query.year)   || new Date().getFullYear();
+    const statusParam = req.query.status || "paid"; // "paid" | "all"
+
+    // ── Match stage ──────────────────────────────────────────────────────
+    const matchStage = {
+      billingDate: {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lte: new Date(`${year}-12-31T23:59:59.999Z`),
+      },
+    };
+
+    if (statusParam === "paid") {
+      matchStage.status = "paid";
+    }
+    // "all" → no status filter added (includes paid + unpaid + cancelled)
+
+    // ── Aggregation pipeline ─────────────────────────────────────────────
+    // Step 1: group by month + plan → get revenue + transaction count
+    // Step 2: reshape into one doc per month with a plans array
+    const raw = await TransactionModel.aggregate([
+      { $match: matchStage },
+
+      {
+        $group: {
+          _id: {
+            month: { $month: "$billingDate" },
+            plan:  "$plan",
+          },
+          totalRevenue: { $sum: "$amount" }, // amount already in dollars (see saveTransaction)
+          transactions: { $sum: 1 },
+        },
+      },
+
+      {
+        $group: {
+          _id: "$_id.month",
+          plans: {
+            $push: {
+              plan:         "$_id.plan",
+              totalRevenue: "$totalRevenue",
+              transactions: "$transactions",
+            },
+          },
+        },
+      },
+
+      { $sort: { _id: 1 } },
+    ]);
+
+    // ── Normalize to 12 fixed monthly rows ───────────────────────────────
+    const MONTH_NAMES = [
+      "Jan","Feb","Mar","Apr","May",
+      "Jun","Jul","Aug","Sep","Oct","Nov","Dec",
+    ];
+
+    // Build lookup: monthNumber (1-12) → { basic, professional, advanced }
+    const monthMap = {};
+    raw.forEach(({ _id: monthNum, plans }) => {
+      monthMap[monthNum] = {};
+      plans.forEach(({ plan, totalRevenue, transactions }) => {
+        monthMap[monthNum][plan] = { totalRevenue, transactions };
+      });
+    });
+
+    const EMPTY_PLAN = { totalRevenue: 0, transactions: 0, avgPerSubscriber: 0 };
+
+    const buildPlanStats = (data) => {
+      if (!data || data.transactions === 0) return { ...EMPTY_PLAN };
+      return {
+        totalRevenue:    +data.totalRevenue.toFixed(2),
+        transactions:    data.transactions,
+        avgPerSubscriber: +(data.totalRevenue / data.transactions).toFixed(2),
+      };
+    };
+
+    const rows = Array.from({ length: 12 }, (_, i) => {
+      const monthNum  = i + 1;
+      const planData  = monthMap[monthNum] || {};
+
+      const basic        = buildPlanStats(planData["basic"]);
+      const professional = buildPlanStats(planData["professional"]);
+      const advanced     = buildPlanStats(planData["advanced"]);
+
+      const totalRevenue = basic.totalRevenue + professional.totalRevenue + advanced.totalRevenue;
+      const transactions = basic.transactions + professional.transactions + advanced.transactions;
+
+      return {
+        month:           MONTH_NAMES[i],
+        monthNum,
+        basic,
+        professional,
+        advanced,
+        totalRevenue:    +totalRevenue.toFixed(2),
+        transactions,
+        avgPerSubscriber: transactions > 0
+          ? +(totalRevenue / transactions).toFixed(2)
+          : 0,
+      };
+    });
+
+    // ── Yearly summary (footer totals) ───────────────────────────────────
+    const summary = {
+      basic:        { totalRevenue: 0, transactions: 0 },
+      professional: { totalRevenue: 0, transactions: 0 },
+      advanced:     { totalRevenue: 0, transactions: 0 },
+      totalRevenue: 0,
+      transactions: 0,
+    };
+
+    rows.forEach((r) => {
+      ["basic", "professional", "advanced"].forEach((p) => {
+        summary[p].totalRevenue += r[p].totalRevenue;
+        summary[p].transactions += r[p].transactions;
+      });
+      summary.totalRevenue += r.totalRevenue;
+      summary.transactions += r.transactions;
+    });
+
+    // Round & compute avg for summary row
+    ["basic", "professional", "advanced"].forEach((p) => {
+      summary[p].totalRevenue     = +summary[p].totalRevenue.toFixed(2);
+      summary[p].avgPerSubscriber = summary[p].transactions > 0
+        ? +(summary[p].totalRevenue / summary[p].transactions).toFixed(2)
+        : 0;
+    });
+    summary.totalRevenue     = +summary.totalRevenue.toFixed(2);
+    summary.avgPerSubscriber = summary.transactions > 0
+      ? +(summary.totalRevenue / summary.transactions).toFixed(2)
+      : 0;
+
+    return res.status(200).json({
+      success: true,
+      year,
+      statusFilter: statusParam,
+      rows,     // Array[12] — one per month, always present even if all zeros
+      summary,  // yearly totals + per-plan totals
+    });
+
+  } catch (error) {
+    console.error("getRevenueBreakdown error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch revenue breakdown",
+    });
+  }
+};
