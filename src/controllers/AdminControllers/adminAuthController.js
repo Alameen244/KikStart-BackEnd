@@ -138,7 +138,7 @@ const login = async (req, res) => {
                 message: "Invalid email or password",
             });
         }
-  
+
         const token = signAdminToken(existingUser);
         await sendEmail({
             to: email,
@@ -680,16 +680,81 @@ const assignPermissionRole = async (req, res) => {
     }
 };
 
-const getAllUsers = async (_req, res) => {
+const getAllUsers = async (req, res) => {
     try {
-        const users = await AuthModel.find({ isVerified: true })
-            .select("-password -otp -otpExpiry -forgotOtpVerification -pendingExpiryAt")
-            .sort({ createdAt: -1 });
+        const {
+            page = 1,
+            limit = 20,
+            search = "",
+            role,
+            status,
+            subscriptionStatus,
+            plan,
+            sortBy = "createdAt",
+            sortOrder = "desc",
+        } = req.query;
+
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const skip = (pageNum - 1) * limitNum;
+
+        // --- Build Filter Query ---
+        const query = { isVerified: true };
+
+        // Search by name or email
+        if (search.trim()) {
+            query.$or = [
+                { name: { $regex: search.trim(), $options: "i" } },
+                { email: { $regex: search.trim(), $options: "i" } },
+            ];
+        }
+
+        // Role filter: "user" | "admin" | "subAdmin"
+        if (role) {
+            query.role = role;
+        }
+
+        // Account status filter: "active" | "inactive"
+        // We derive this from isVerified + pendingExpiryAt (adjust if you have a separate isActive field)
+        if (status === "active") {
+            query.pendingExpiryAt = null;
+        } else if (status === "inactive") {
+            query.pendingExpiryAt = { $ne: null };
+        }
+
+        // Subscription status filter: "active" | "inactive" | "cancelled"
+        if (subscriptionStatus) {
+            query["subscription.status"] = subscriptionStatus;
+        }
+
+        // Plan filter: "basic" | "professional" | "advanced"
+        if (plan) {
+            query["subscription.plan"] = plan;
+        }
+
+        // --- Build Sort ---
+        const allowedSortFields = ["createdAt", "name", "email", "subscription.plan"];
+        const sortField = allowedSortFields.includes(sortBy) ? sortBy : "createdAt";
+        const sortDir = sortOrder === "asc" ? 1 : -1;
+        const sort = { [sortField]: sortDir };
+
+        // --- Paginated Query ---
+        const [users, total] = await Promise.all([
+            AuthModel.find(query)
+                .select("-password -otp -otpExpiry -forgotOtpVerification -pendingExpiryAt")
+                .sort(sort)
+                .skip(skip)
+                .limit(limitNum),
+            AuthModel.countDocuments(query),
+        ]);
 
         return res.status(200).json({
             success: true,
             message: users.length ? "Users fetched successfully" : "No users found",
             count: users.length,
+            total,
+            page: pageNum,
+            totalPages: Math.ceil(total / limitNum),
             data: users,
         });
     } catch (error) {
@@ -697,6 +762,55 @@ const getAllUsers = async (_req, res) => {
         return res.status(500).json({
             success: false,
             message: "Failed to fetch users",
+        });
+    }
+};
+
+const exportAllUsers = async (req, res) => {
+    try {
+        const {
+            search = "",
+            role,
+            status,
+            subscriptionStatus,
+            plan,
+            sortBy = "createdAt",
+            sortOrder = "desc",
+        } = req.query;
+
+        const query = { isVerified: true };
+
+        if (search.trim()) {
+            query.$or = [
+                { name: { $regex: search.trim(), $options: "i" } },
+                { email: { $regex: search.trim(), $options: "i" } },
+            ];
+        }
+        if (role) query.role = role;
+        if (status === "active") query.pendingExpiryAt = null;
+        else if (status === "inactive") query.pendingExpiryAt = { $ne: null };
+        if (subscriptionStatus) query["subscription.status"] = subscriptionStatus;
+        if (plan) query["subscription.plan"] = plan;
+
+        const allowedSortFields = ["createdAt", "name", "email", "subscription.plan"];
+        const sortField = allowedSortFields.includes(sortBy) ? sortBy : "createdAt";
+        const sort = { [sortField]: sortOrder === "asc" ? 1 : -1 };
+
+        const users = await AuthModel.find(query)
+            .select("-password -otp -otpExpiry -forgotOtpVerification -pendingExpiryAt")
+            .sort(sort);
+
+        return res.status(200).json({
+            success: true,
+            message: "Users exported successfully",
+            count: users.length,
+            data: users,
+        });
+    } catch (error) {
+        console.error("admin exportAllUsers error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to export users",
         });
     }
 };
@@ -785,6 +899,7 @@ export {
     getSubAdmins,
     assignPermissionRole,
     getAllUsers,
+    exportAllUsers,
     getUserById,
     deleteUserById,
 };

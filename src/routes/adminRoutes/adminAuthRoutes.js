@@ -5,6 +5,7 @@ import {
   deleteUserById,
   forgotPassword,
   getAllUsers,
+
   getSubAdmins,
   getUserById,
   login,
@@ -14,6 +15,7 @@ import {
   sendOTP,
   verifyForgotOTP,
   verifySignUpOTP,
+  exportAllUsers,
 } from "../../controllers/AdminControllers/adminAuthController.js";
 import { authMiddleware } from "../../middlewares/authMiddleware.js";
 import checkPermission from "../../middlewares/checkPermissionMiddleware.js";
@@ -61,6 +63,13 @@ adminAuthRouter.get(
   checkPermission("User Management", "read"),
   getAllUsers,
 );
+adminAuthRouter.get(
+  "/users/export",
+  authMiddleware,
+  checkPermission("User Management", "read"),
+  exportAllUsers,
+);
+
 adminAuthRouter.get(
   "/users/:id",
   authMiddleware,
