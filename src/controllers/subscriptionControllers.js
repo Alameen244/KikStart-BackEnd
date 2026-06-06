@@ -453,29 +453,63 @@ export const getUserTransactions = async (req, res) => {
 
 // ===============================
 // ADMIN — GET ALL USERS SUMMARY
+// (with filters, sorting, export)
 // ===============================
 
 export const getAdminUsersSummary = async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = 20;
-        const skip = (page - 1) * limit;
+        const page        = parseInt(req.query.page)  || 1;
+        const limit       = 20;
+        const skip        = (page - 1) * limit;
+        const exportAll   = req.query.exportAll === "true"; // skip pagination
 
-        // Aggregate: join users with their transactions
+        // --- Filters ---
+        const { plan, subscriptionStatus, transactionStatus } = req.query;
+
+        // --- Sorting ---
+        // allowed fields: totalPaid | transactionCount | name
+        const allowedSortFields = ["totalPaid", "transactionCount", "name"];
+        const sortBy    = allowedSortFields.includes(req.query.sortBy)
+                            ? req.query.sortBy
+                            : "totalPaid";
+        const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
+        // ── Stage 1: filter users who have a stripeCustomerId ──
+        const matchStage = {
+            "subscription.stripeCustomerId": { $ne: null, $exists: true }
+        };
+
+        // optional: filter by subscription plan
+        if (plan) {
+            matchStage["subscription.plan"] = plan.toLowerCase();
+        }
+
+        // optional: filter by subscription status
+        if (subscriptionStatus) {
+            matchStage["subscription.status"] = subscriptionStatus.toLowerCase();
+        }
+
+        // ── Stage 2: transaction-level filter for the $lookup ──
+        // We filter transactions inside $lookup pipeline so totalPaid reflects
+        // the chosen status, but keep all transactions for transactionCount.
+        const transactionMatchCond = transactionStatus
+            ? { $eq: ["$$tx.status", transactionStatus.toLowerCase()] }
+            : { $eq: ["$$tx.status", "paid"] }; // default: only paid
+
         const result = await AuthModel.aggregate([
-            {
-                $match: {
-                    "subscription.stripeCustomerId": { $ne: null, $exists: true }
-                }
-            },
+            { $match: matchStage },
+
+            // join all transactions for this user
             {
                 $lookup: {
-                    from: "transactions",         // MongoDB collection name
+                    from: "transactions",
                     localField: "_id",
                     foreignField: "userId",
                     as: "transactions"
                 }
             },
+
+            // compute totalPaid (respects transactionStatus filter) + count
             {
                 $addFields: {
                     totalPaid: {
@@ -485,7 +519,7 @@ export const getAdminUsersSummary = async (req, res) => {
                                     $filter: {
                                         input: "$transactions",
                                         as: "tx",
-                                        cond: { $eq: ["$$tx.status", "paid"] }
+                                        cond: transactionMatchCond
                                     }
                                 },
                                 as: "tx",
@@ -496,11 +530,13 @@ export const getAdminUsersSummary = async (req, res) => {
                     transactionCount: { $size: "$transactions" }
                 }
             },
+
             {
                 $project: {
                     _id: 1,
                     email: 1,
                     name: 1,
+                    createdAt: 1,
                     "subscription.plan": 1,
                     "subscription.status": 1,
                     "subscription.stripeCustomerId": 1,
@@ -508,16 +544,32 @@ export const getAdminUsersSummary = async (req, res) => {
                     transactionCount: 1
                 }
             },
-            { $sort: { totalPaid: -1 } },        // highest spenders first
-            {
-                $facet: {
-                    data: [{ $skip: skip }, { $limit: limit }],
-                    totalCount: [{ $count: "count" }]
-                }
-            }
+
+            { $sort: { [sortBy]: sortOrder } },
+
+            // ── Facet: paginated data + total count ──
+            ...(exportAll
+                ? [] // no facet when exporting all — just return flat array
+                : [
+                    {
+                        $facet: {
+                            data: [{ $skip: skip }, { $limit: limit }],
+                            totalCount: [{ $count: "count" }]
+                        }
+                    }
+                ])
         ]);
 
-        const users = result[0]?.data || [];
+        // ── Export-all response ──
+        if (exportAll) {
+            return res.status(200).json({
+                success: true,
+                data: { users: result }
+            });
+        }
+
+        // ── Paginated response ──
+        const users      = result[0]?.data       || [];
         const totalCount = result[0]?.totalCount[0]?.count || 0;
         const totalPages = Math.ceil(totalCount / limit);
 
@@ -546,6 +598,7 @@ export const getAdminUsersSummary = async (req, res) => {
 
 // ===============================
 // ADMIN — GET ONE USER'S TRANSACTIONS
+// (unchanged structure, already solid)
 // ===============================
 
 export const getAdminUserTransactions = async (req, res) => {
@@ -553,55 +606,55 @@ export const getAdminUserTransactions = async (req, res) => {
         const { userId } = req.params;
 
         if (!userId) {
-            return res.status(400).json({
-                success: false,
-                message: "userId is required"
-            });
+            return res.status(400).json({ success: false, message: "userId is required" });
         }
 
-        // validate it's a real ObjectId before hitting DB
         if (!mongoose.Types.ObjectId.isValid(userId)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid userId"
-            });
+            return res.status(400).json({ success: false, message: "Invalid userId" });
         }
 
-        const page = parseInt(req.query.page) || 1;
-        const limit = 10;                         // smaller limit — inside an expandable row
-        const skip = (page - 1) * limit;
+        const page  = parseInt(req.query.page) || 1;
+        const limit = 10;
+        const skip  = (page - 1) * limit;
 
-        const totalCount = await TransactionModel.countDocuments({ userId });
+        // exportAll flag — used when admin clicks "Export PDF" on a single user
+        const exportAll = req.query.exportAll === "true";
+
+        const query = { userId };
+
+        const totalCount = await TransactionModel.countDocuments(query);
         const totalPages = Math.ceil(totalCount / limit);
 
-        const transactions = await TransactionModel.find({ userId })
+        const findQuery = TransactionModel.find(query)
             .sort({ billingDate: -1 })
-            .skip(skip)
-            .limit(limit)
             .select("stripeInvoiceId billingDate amount status plan invoicePdfUrl");
+
+        if (!exportAll) {
+            findQuery.skip(skip).limit(limit);
+        }
+
+        const transactions = await findQuery;
 
         return res.status(200).json({
             success: true,
             data: {
                 transactions,
-                pagination: {
-                    currentPage: page,
-                    totalPages,
-                    totalCount,
-                    hasNextPage: page < totalPages,
-                    hasPrevPage: page > 1
-                }
+                ...(!exportAll && {
+                    pagination: {
+                        currentPage: page,
+                        totalPages,
+                        totalCount,
+                        hasNextPage: page < totalPages,
+                        hasPrevPage: page > 1
+                    }
+                })
             }
         });
 
     } catch (error) {
-        return res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        return res.status(500).json({ success: false, message: error.message });
     }
 };
-
 
 // ===============================
 // HELPER
