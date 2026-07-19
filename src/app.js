@@ -37,9 +37,13 @@ import programRoutes from './routes/homeRoutes/programRoutes.js';
 import roleAndPermissionRoutes from './routes/role & permission/roleAndPermissionRoutes.js';
 import subscriptionRouter from './routes/subscriptionRoutes.js';
 import conversationRouter from './routes/twilioRoutes.js';
+import subAdminRouter from './routes/adminRoutes/subAdminRoutes.js';
+import coachRouter from './routes/adminRoutes/coachRoutes.js';
+
 
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/admin/auth', adminAuthRoutes);
+app.use('/api/v1/admin/auth', adminAuthRoutes , subAdminRouter);
+app.use('/api/v1/admin/', coachRouter);
 app.use('/api/v1/image', imageRoutes);
 app.use('/api/v1/banner', bannerRoutes);
 app.use('/api/v1/who', whoRoutes);

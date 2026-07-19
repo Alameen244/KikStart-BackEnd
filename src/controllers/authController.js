@@ -10,34 +10,13 @@ import loginSuccessTemplate from "../Templates/loginSuccessTemplate.js";
 import registerSuccessTemplate from "../Templates/registerSuccessTemplate.js";
 import { defaultImageValue } from "../models/shared/imageSchema.js";
 import { exchangeGoogleCodeForTokens, fetchGoogleUserProfile } from "../utils/googleClient.js";
+import { normalizeEmail , generateRandomPassword } from "../utils/authhelper.js";
 
-const normalizeEmail = (email) => email?.trim().toLowerCase();
 const pendingExpiryDate = () => new Date(Date.now() + 24 * 60 * 60 * 1000);
 
 // generate OTP
 const generateOTP = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
-};
-
-const generateRandomPassword = () => {
-    const uppercase = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-    const lowercase = "abcdefghijkmnopqrstuvwxyz";
-    const numbers = "23456789";
-    const all = `${uppercase}${lowercase}${numbers}`;
-
-    let password =
-        uppercase[Math.floor(Math.random() * uppercase.length)] +
-        lowercase[Math.floor(Math.random() * lowercase.length)] +
-        numbers[Math.floor(Math.random() * numbers.length)];
-
-    while (password.length < 10) {
-        password += all[Math.floor(Math.random() * all.length)];
-    }
-
-    return password
-        .split("")
-        .sort(() => Math.random() - 0.5)
-        .join("");
 };
 
 

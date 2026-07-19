@@ -41,7 +41,7 @@ export const programCardSchema = new mongoose.Schema(
       default: 0,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const programSectionSchema = new mongoose.Schema(
@@ -67,16 +67,26 @@ const programSectionSchema = new mongoose.Schema(
 
     homeLimit: {
       type: Number,
+      min: 1,
       default: 4,
     },
     programs: {
       type: [programCardSchema],
       default: [],
+      validate: {
+        validator: function (val) {
+          return val.length <= this.homeLimit;
+        },
+        message: "Number of programs exceeds home limit",
+      },
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-const programSectionModel = mongoose.model("ProgramSection", programSectionSchema);
+const programSectionModel = mongoose.model(
+  "ProgramSection",
+  programSectionSchema,
+);
 
 export { PROGRAM_SECTION_KEY, programSectionModel };
